@@ -34,6 +34,7 @@ class TipoCapacidadeService extends ServiceBase
         ["MENU_RX_PESQUISAS_ACESSO", "Permite acessar o menu Pesquisas"],
         ["MENU_RX_QUEST_DINAMICOS_ACESSO", "Permite acessar o menu Questionários Dinâmicos"],
         ["MENU_RX_CADASTROS_ACESSO", "Permite acessar o menu Cadastros (RaioX)"],
+        ["MENU_RELATORIOS", "Permite acessar o menu Relatórios"],
       ]
     ], [
       "codigo" => "MOD_AFT",
@@ -253,6 +254,7 @@ class TipoCapacidadeService extends ServiceBase
         ["MOD_PART_INCL", "Permite incluir participantes do programa"],
         ["MOD_PART_DESAB", "Permite desabilitar participantes do programa"],
         ["MOD_PRGT_EXT", "Permite visualizar todos os programas, independente da hierarquia de unidades"],
+        ["MOD_PART_PEDAGIO", "Permite gerenciar o período de pedagio dos participantes do programa"]
       ]
     ], [
       "codigo" => "MOD_PROD",
@@ -411,7 +413,35 @@ class TipoCapacidadeService extends ServiceBase
         ["MOD_TIPO_CLI_EXCL", "Permite excluir tipos de clientes"],
         ["MOD_TIPO_CLI_INCL", "Permite incluir tipos de clientes"]
       ]
-    ]
+    ],
+    [
+        "codigo" => "MOD_RELATORIOS",
+        "descricao" => "Módulo de Relatórios",
+    ],
+    [
+        "codigo" => "MOD_RELATORIO_PT",
+        "descricao" => "Relatório de Planos de Trabalho",
+    ],
+    [
+        "codigo" => "MOD_RELATORIO_PE",
+        "descricao" => "Relatório de Planos de Entrega",
+    ],
+    [
+        "codigo" => "MOD_RELATORIO_USUARIO",
+        "descricao" => "Relatório de Agentes Públicos",
+    ],
+    [
+        "codigo" => "MOD_RELATORIO_USUARIO_TODAS_UNIDADES",
+        "descricao" => "Relatório de Agentes Públicos - Listar todas as unidades",
+    ],
+    [
+        "codigo" => "MOD_RELATORIO_UNIDADE",
+        "descricao" => "Relatório de Unidades",
+    ],
+    [
+        "codigo" => "MOD_RELATORIO_UNIDADE_TODAS_UNIDADES",
+        "descricao" => "Relatório de Unidades - Listar todas as unidades",
+    ],
   ];
 
   private function differentDev(&$data)

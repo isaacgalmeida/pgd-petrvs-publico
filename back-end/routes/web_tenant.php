@@ -1,9 +1,10 @@
 <?php
 
+
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\LoginController;
 use Stancl\Tenancy\Middleware\InitializeTenancyByPath;
-
+use App\Http\Controllers\ImpersonationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -63,3 +64,13 @@ Route::middleware([InitializeTenancyByPath::class])
     ->get('/login-unico/{tenant}',
           [LoginController::class, 'signInGovBrCallback']);
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/impersonate/{userId}', [ImpersonationController::class, 'impersonate'])->name('impersonate.start');
+    Route::get('/impersonate/stop', [ImpersonationController::class, 'stopImpersonating'])->name('impersonate.stop');
+});
+
+
+
+Route::view('/web/erro-500', 'erros.500')->name('erro.500');

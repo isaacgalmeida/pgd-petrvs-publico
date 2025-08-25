@@ -17,7 +17,6 @@ import {PlanoTrabalhoService} from "../plano-trabalho.service";
 import {DocumentoService} from "src/app/modules/uteis/documentos/documento.service";
 import {UtilService} from "src/app/services/util.service";
 import {UnidadeService} from "src/app/services/unidade.service";
-
 @Component({
 	selector: "plano-trabalho-list",
 	templateUrl: "./plano-trabalho-list.component.html",
@@ -64,7 +63,6 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 	public BOTAO_REATIVAR: ToolbarButton;
 	public BOTAO_SUSPENDER: ToolbarButton;
 	public BOTAO_TERMOS: ToolbarButton;
-	public BOTAO_RELATORIO: ToolbarButton;
 	public BOTAO_CONSOLIDACOES: ToolbarButton;
 	public DATAS_FILTRO: LookupItem[] = [
 		{key: "VIGENTE", value: "Vigente"},
@@ -93,7 +91,7 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 		this.filter = this.fh.FormBuilder(
 			{
 				agrupar: {default: true},
-				subordinadas: { default: true },
+				subordinadas: { default: false },
 				lotados_minha_unidade: {default: false},
 				usuario: {default: ""},
 				status: {default: ""},
@@ -103,6 +101,7 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 				data_filtro: {default: null},
 				data_filtro_inicio: {default: new Date()},
 				data_filtro_fim: {default: new Date()},
+				meus_planos: { default: true },
 			},
 			this.cdRef,
 			this.filterValidate
@@ -190,11 +189,7 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 			icon: "bi bi-info-circle",
 			onClick: this.consult.bind(this),
 		};
-		this.BOTAO_RELATORIO = {
-			label: "Relatório",
-			icon: "bi bi-file-pdf",
-			onClick: (row: PlanoTrabalho) => this.report(row, "PTR_LISTA_ENTREGAS"),
-		};
+	
 		this.BOTAO_TERMOS = {
 			label: "Termos",
 			icon: "bi bi-file-earmark-check",
@@ -244,8 +239,12 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 			),
 			onClick: this.suspender.bind(this),
 		};
-		this.BOTAO_CLONAR = { label: "Clonar", icon: "bi bi-copy", color: "btn-outline-primary", onClick: (planoTrabalho: PlanoTrabalho) => this.go.navigate({ route: ['gestao', 'plano-trabalho', planoTrabalho.id, 'clone'] }, this.modalRefreshId(planoTrabalho)) };
-
+		this.BOTAO_CLONAR = { label: "Clonar", icon: "bi bi-copy", color: "btn-outline-primary", onClick: (planoTrabalho: PlanoTrabalho) => {
+			this.dialog.alert("Atenção!", "Não serão clonados os percentuais de contribuição e as contribuições para entregas que não estejam mais disponíveis").then(() => {	
+				this.go.navigate({ route: ['gestao', 'plano-trabalho', planoTrabalho.id, 'clone'] }, this.modalRefreshId(planoTrabalho)) 
+			});
+		}};
+		this.addOption(this.OPTION_LOGS, "MOD_AUDIT_LOG");
 		this.botoes = [
 			this.BOTAO_ALTERAR,
 			this.BOTAO_ARQUIVAR,
@@ -256,11 +255,12 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 			this.BOTAO_DESARQUIVAR,
 			this.BOTAO_ENVIAR_ASSINATURA,
 			this.BOTAO_INFORMACOES,
-			this.BOTAO_RELATORIO,
 			this.BOTAO_TERMOS,
 			this.BOTAO_CONSOLIDACOES,
 			this.BOTAO_REATIVAR,
-			this.BOTAO_SUSPENDER
+			this.BOTAO_SUSPENDER,
+			this.BOTAO_CLONAR,
+			this.OPTION_LOGS
 		];
 		this.rowsLimit = 10;
 	}
@@ -285,7 +285,6 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 		this.botoes.forEach((botao) => {
 			if (this.botaoAtendeCondicoes(botao, row)) result.push(botao);
 		});
-		result.push(this.BOTAO_RELATORIO);
 		return result;
 	}
 
@@ -384,6 +383,7 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 		filter.controls.data_filtro.setValue(null);
 		filter.controls.data_filtro_inicio.setValue(new Date());
 		filter.controls.data_filtro_fim.setValue(new Date());
+		filter.controls.meus_planos.setValue(true);
 		super.filterClear(filter);
 	}
 
@@ -404,6 +404,10 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 				"like",
 				"%" + form.usuario.trim().replace(" ", "%") + "%",
 			]);
+		if (this.filter?.controls.meus_planos.value) {
+			let w1: [string, string, string[]] = ["unidade_id", "in", (this.auth.unidades || []).map(u => u.id)];
+			result.push(w1);
+		}
 		if (form.unidade_id?.length)
 			result.push(["unidade_id", "==", form.unidade_id]);
 		if (form.status) result.push(["status", "==", form.status]);
@@ -420,6 +424,9 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 			"==",
 			this.filter!.controls.subordinadas.value,
 		]);
+		if (this.filter!.controls.meus_planos.value)
+			result.push(["usuario.id", "==", this.auth.usuario?.id]);
+
 		return result;
 	};
 
@@ -438,7 +445,8 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 
 
 	public onLotadosMinhaUnidadeChange(event: Event) {
-		this.grid!.reloadFilter();
+		this.disableLotados();
+		//this.grid!.reloadFilter();
 	}
 
 	public dynamicMultiselectMenu = (
@@ -498,6 +506,8 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 			this.planoTrabalhoService.situacaoPlano(planoTrabalho) == "ATIVO";
 		let planoConcluido =
 			this.planoTrabalhoService.situacaoPlano(planoTrabalho) == "CONCLUIDO";
+		let planoAvaliado =
+			this.planoTrabalhoService.situacaoPlano(planoTrabalho) == "AVALIADO";
 		let planoCancelado =
 			this.planoTrabalhoService.situacaoPlano(planoTrabalho) == "CANCELADO";
 		let planoDeletado =
@@ -700,13 +710,30 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 						return this.auth.hasPermissionTo("MOD_PTR");
 					case this.BOTAO_CONSOLIDACOES:
 						return true;
+					case this.OPTION_LOGS:
+						return true;
 					case this.BOTAO_CLONAR:
-						return this.auth.hasPermissionTo("MOD_PTR_INCL");
+						return (planoConcluido || planoAvaliado) && this.auth.hasPermissionTo("MOD_PTR_INCL");
 				}
 			}
 		}
 		return false;
 	}
+
+	public contadorAssinaturas(planoTrabalho: PlanoTrabalho): string {
+    let jaAssinaramTCR = planoTrabalho._metadata?.jaAssinaramTCR || {};
+   	const assinaturasNecessarias = [
+        ...(jaAssinaramTCR.participante || []),
+        ...(jaAssinaramTCR.gestores_unidade_executora || []),
+        ...(jaAssinaramTCR.gestores_unidade_lotacao || []),
+        ...(jaAssinaramTCR.gestores_entidade || [])
+    ];
+		const totalExigidasUnicas = new Set(assinaturasNecessarias).size;
+
+
+    return `${totalExigidasUnicas} de ${planoTrabalho._metadata?.quantidadeAssinaturasExigidas}`;
+	}
+
 
 	public arquivar(planoTrabalho: PlanoTrabalho) {
 		this.go.navigate(this.routeStatus, {
@@ -813,23 +840,6 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 		});
 	}
 
-	public report(planoTrabalho: PlanoTrabalho, codigo: string) {
-		const consulta: any = {
-			id: planoTrabalho.id,
-			join: [
-				"unidade.entidade",
-				"unidade.gestor.usuario:id",
-				"usuario",
-				"programa.template_tcr",
-				"tipo_modalidade",
-				"entregas.plano_entrega_entrega.entrega",
-				"entregas.plano_entrega_entrega.plano_entrega:id,unidade_id",
-				"entregas.plano_entrega_entrega.plano_entrega.unidade",
-				"entregas.entrega",
-			],
-		};
-		this.grid?.buildRowReport(codigo, consulta);
-	}
 
 	public enviarParaAssinatura(planoTrabalho: PlanoTrabalho) {
 		this.go.navigate(this.routeStatus, {
@@ -880,5 +890,56 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 				}
 			},
 		});
+	}
+
+	public disableMeus() {
+		if (!this.filter || !this.filter.controls.subordinadas || !this.filter.controls.meus_planos) {
+			console.warn("Formulário ou controles não inicializados corretamente.");
+			return;
+		}
+
+		// Se "Unidades Subordinadas" está ativado, desativa "Meus Planos"
+		if (this.filter.controls.subordinadas.value) {
+			this.filter.controls.meus_planos.setValue(false);
+			this.filter.controls.lotados_minha_unidade.setValue(false);
+		} else {
+			this.filter.controls.meus_planos.setValue(true);
+		}
+
+		//this.grid!.reloadFilter();
+	}
+
+	public disableSub() {
+		if (!this.filter || !this.filter.controls.subordinadas || !this.filter.controls.meus_planos) {
+			console.warn("Formulário ou controles não inicializados corretamente.");
+			return;
+		}
+
+		// Se "Meus Planos" está ativado, desativa "Unidades Subordinadas"
+		if (this.filter.controls.meus_planos.value) {
+			this.filter!.controls.subordinadas.setValue(false);
+			this.filter!.controls.lotados_minha_unidade.setValue(false);
+		} else {
+			this.filter!.controls.subordinadas.setValue(true);
+
+		}
+
+		//this.grid!.reloadFilter();
+	}
+
+	public disableLotados() {
+		if (!this.filter || !this.filter.controls.subordinadas || !this.filter.controls.meus_planos || !this.filter.controls.lotados_minha_unidade) {
+			console.warn("Formulário ou controles não inicializados corretamente.");
+			return;
+		}
+
+		if (this.filter.controls.lotados_minha_unidade.value) {
+			this.filter.controls.meus_planos.setValue(false);
+			this.filter!.controls.subordinadas.setValue(false);
+		} else {
+			this.filter.controls.meus_planos.setValue(true);
+		}
+
+		//this.grid!.reloadFilter();
 	}
 }

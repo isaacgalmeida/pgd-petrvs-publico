@@ -84,7 +84,8 @@ export class PlanoTrabalhoFormComponent extends PageFormBase<PlanoTrabalho, Plan
       "unidade.entidade", 
       "entregas.entrega", 
       "entregas.plano_entrega_entrega:id,plano_entrega_id", 
-      "usuario",
+      "usuario.participacoes_programas",
+      "usuario.lotacao",
       "programa.template_tcr", 
       "tipo_modalidade", 
       "documento", 
@@ -144,6 +145,7 @@ export class PlanoTrabalhoFormComponent extends PageFormBase<PlanoTrabalho, Plan
 
   public atualizarTcr() {
     this.entity = this.loadEntity();
+ 
     if (!this.formDisabled) {
       let textoUsuario = this.form!.controls.usuario_texto_complementar.value;
       let textoUnidade = this.form!.controls.unidade_texto_complementar.value;
@@ -154,6 +156,9 @@ export class PlanoTrabalhoFormComponent extends PageFormBase<PlanoTrabalho, Plan
       this.template = this.entity.programa?.template_tcr;
       this.editingId = ["ADD", "EDIT"].includes(documento?._status || "") ? documento!.id : undefined;
     }
+
+    
+    
 
     this.cdRef.detectChanges();
   }
@@ -220,7 +225,7 @@ export class PlanoTrabalhoFormComponent extends PageFormBase<PlanoTrabalho, Plan
     this.cdRef.detectChanges();
   }
 
-  public async onUsuarioSelect(selected: SelectItem) {
+  public async onUsuarioSelect(selected: SelectItem) {    
     let programa_habilitado = selected.entity.participacoes_programas.find((x: { habilitado: number; }) => x.habilitado == 1);
     
     this.form!.controls.usuario_texto_complementar.setValue(selected.entity.texto_complementar_plano || "");
@@ -237,6 +242,13 @@ export class PlanoTrabalhoFormComponent extends PageFormBase<PlanoTrabalho, Plan
       join: this.joinPrograma,
       orderBy: [["unidade.path", "desc"]]
     }).asPromise();
+
+    if(selected.entity.pedagio) {
+      let modalidades = await this.tipoModalidadeDao.query({
+        where: [['exige_pedagio', '==', 0]]
+      }).asPromise();
+      this.form?.controls.tipo_modalidade_id.setValue(modalidades[0]?.id);
+    }
     
     if (programa_habilitado) {
       const programaEncontrado = programas.find((x: Programa) => x.id == programa_habilitado.programa_id);
@@ -306,17 +318,13 @@ export class PlanoTrabalhoFormComponent extends PageFormBase<PlanoTrabalho, Plan
   }
 
   public async loadData(entity: PlanoTrabalho, form: FormGroup, action?: string) {
-
     if(action == 'clone') {
+ 
       entity.id = "";
       entity.data_inicio = new Date();
-      entity.data_fim = new Date();
+      entity.data_fim = moment().add(1, 'day').toDate();
       entity.documento_id = null;
-      entity.entregas = entity.entregas.map((entrega: PlanoTrabalhoEntrega) => {
-        entrega.id = this.documentoDao.generateUuid();
-        entrega._status = "ADD";
-        return entrega as PlanoTrabalhoEntrega;
-      });
+      entity.entregas = this.entregasClonadas(entity.entregas)
     }
 
     this.planoTrabalho = new PlanoTrabalho(entity);
@@ -329,14 +337,35 @@ export class PlanoTrabalhoFormComponent extends PageFormBase<PlanoTrabalho, Plan
     ]);
     let formValue = Object.assign({}, form.value);
     form.patchValue(this.util.fillForm(formValue, entity));
-    if (action == 'clone') {
-      form.controls.data_inicio.setValue("");
-      form.controls.data_fim.setValue("");
+
+    if(action == 'clone') {
+      this.form?.controls.usuario_texto_complementar.setValue(entity.usuario?.texto_complementar_plano || "");
+    } else {
+      this.atualizarTcr();
     }
+
     /*let documento = entity.documentos.find(x => x.id == entity.documento_id);
     if(documento) this._datasource = documento.datasource;*/
     this.calculaTempos();
-    this.atualizarTcr();
+    
+  }
+
+  public entregasClonadas(entregas: PlanoTrabalhoEntrega[]) {
+
+    // Se a entrega for vinculada a um plano de entrega, o plano de entrega precisa estar vigente
+    // Se a entrega tiver sido excluida do plano de entrega, o plano de entrega precisa estar vigente
+
+    const entregasVigentes = entregas.filter((entrega: PlanoTrabalhoEntrega) => {
+      return entrega.plano_entrega_entrega !== null && entrega.plano_entrega_entrega_id !== null;
+    });
+
+    return entregasVigentes.map((entrega: PlanoTrabalhoEntrega) => {
+      entrega.id = this.documentoDao.generateUuid();
+      entrega._status = "ADD";
+      entrega.forca_trabalho = 0;
+      return entrega as PlanoTrabalhoEntrega;
+    }); 
+    
   }
 
   public async initializeData(form: FormGroup) {
@@ -346,27 +375,30 @@ export class PlanoTrabalhoFormComponent extends PageFormBase<PlanoTrabalho, Plan
       this.entity = new PlanoTrabalho();
       this.entity.carga_horaria = this.auth.entidade?.carga_horaria_padrao || 8;
       this.entity.forma_contagem_carga_horaria = this.auth.entidade?.forma_contagem_carga_horaria || "DIA";
-      this.entity.unidade_id = this.auth.unidade!.id;
-      let programas = await this.programaDao.query({
-        where: [['vigentesUnidadeExecutora', '==', this.auth.unidade!.id]],
-        join: this.joinPrograma,
-        orderBy: [["unidade.path", "desc"]]
-      }).asPromise();
+      if (this.auth.unidade) {
+        this.entity.unidade_id = this.auth.unidade!.id;
+     
+        let programas = await this.programaDao.query({
+          where: [['vigentesUnidadeExecutora', '==', this.auth.unidade!.id]],
+          join: this.joinPrograma,
+          orderBy: [["unidade.path", "desc"]]
+        }).asPromise();      
 
-      let programa_habilitado = this.auth.usuario?.participacoes_programas.find((x: { habilitado?: number; }) => x.habilitado === 1);      
-      if (programa_habilitado) {
-        const programaEncontrado = programas.find((x: Programa) => x.id == programa_habilitado.programa_id);
-        if (programaEncontrado) {
-          this.preenchePrograma(programaEncontrado);
+        let programa_habilitado = this.auth.usuario?.participacoes_programas.find((x: { habilitado?: number; }) => x.habilitado === 1);      
+        if (programa_habilitado) {
+          const programaEncontrado = programas.find((x: Programa) => x.id == programa_habilitado.programa_id);
+          if (programaEncontrado) {
+            this.preenchePrograma(programaEncontrado);
+          } else {
+            this.regramentoNaoEncontrado();
+          }
         } else {
-          this.regramentoNaoEncontrado();
+          this.regramentoNaoEncontrado();        
         }
-      } else {
-        this.regramentoNaoEncontrado();        
-      }
-      this.buscaGestoresUnidadeExecutora(this.auth.unidade!);
-      if(!this.gestoresUnidadeExecutora.includes(this.auth.unidade!.id)) {
-        this.entity.usuario_id = this.auth.usuario!.id;
+        this.buscaGestoresUnidadeExecutora(this.auth.unidade!);
+        if(!this.gestoresUnidadeExecutora.includes(this.auth.unidade!.id)) {
+          this.entity.usuario_id = this.auth.usuario!.id;
+        }
       }
     }
     await this.loadData(this.entity, this.form!);
@@ -377,13 +409,16 @@ export class PlanoTrabalhoFormComponent extends PageFormBase<PlanoTrabalho, Plan
   }
 
   /* Cria um objeto Plano baseado nos dados do formulário */
-  public loadEntity(): PlanoTrabalho {
+  public loadEntity(): PlanoTrabalho {    
     let plano: PlanoTrabalho = this.util.fill(new PlanoTrabalho(), this.entity!);
     plano = this.util.fillForm(plano, this.form!.value);
     plano.usuario = (this.usuario!.selectedEntity || this.entity?.usuario) as Usuario;
     plano.unidade = (this.unidade?.selectedEntity || this.entity?.unidade) as Unidade;
     plano.programa = (this.programa?.selectedEntity || this.entity?.programa) as Programa;
     plano.tipo_modalidade = (this.tipoModalidade!.selectedEntity || this.entity?.tipo_modalidade) as TipoModalidade;   
+    plano.documento = this.entity?.documento;
+    plano.documento_id = this.form?.controls.documento_id.value;
+    
     return plano;
   }
 
@@ -398,6 +433,7 @@ export class PlanoTrabalhoFormComponent extends PageFormBase<PlanoTrabalho, Plan
       this.entity!.documentos = this.entity!.documentos.filter((documento: Documento) => {
         return ["ADD", "EDIT", "DELETE"].includes(documento._status || "");
       });
+      
       /* Salva separadamente as informações do plano */
       let requests: Promise<any>[] = [this.dao!.save(this.entity!, this.join)];
       if (this.form!.controls.editar_texto_complementar_unidade.value) requests.push(this.unidadeDao.update(this.entity!.unidade_id, { texto_complementar_plano: this.form!.controls.unidade_texto_complementar.value }));
@@ -406,12 +442,26 @@ export class PlanoTrabalhoFormComponent extends PageFormBase<PlanoTrabalho, Plan
       this.entity = responses[0] as PlanoTrabalho;
     } finally {
       this.submitting = false;
+      this.exibeAlertaTotalAssinaturas(this.entity);
     }
     return true;
   }
 
   public onTabSelect(tab: LookupItem) {
     if (tab.key == "TERMO") this.atualizarTcr();
+  }
+
+  public exibeAlertaTotalAssinaturas(plano: PlanoTrabalho | undefined) {
+    if(plano){
+       let assinaturasExigidas = plano._metadata?.quantidadeAssinaturasExigidas;
+       let msg = ''
+       if (assinaturasExigidas == 1) 
+        msg = "O participante tem atribuição de chefia substituta da unidade superior à sua unidade de lotação. Por isso, este Plano de Trabalho exigirá somente uma assinatura.";
+        else if (assinaturasExigidas == 3)
+        msg = "Este Plano de Trabalho está sendo criado numa unidade diferente da unidade de lotação. Por isso, a chefia da unidade do plano também deverá assiná-lo";
+      if (assinaturasExigidas != 2)  
+        this.dialog.alert("Atenção", msg, "OK");
+    }
   }
 
   public titleEdit = (entity: PlanoTrabalho): string => {

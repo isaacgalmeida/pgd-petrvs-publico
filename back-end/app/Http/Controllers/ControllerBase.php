@@ -25,10 +25,10 @@ abstract class ControllerBase extends Controller
             $this->collection = str_replace("Controller", "", str_replace("App\\Http\\Controllers", "App\\Models", get_class($this)));
         }
         if(empty($this->service)) {
-            $chield = str_replace("App\\Http", "App", str_replace("Controller", "Service", get_class($this)));
+            $child = str_replace("App\\Http", "App", str_replace("Controller", "Service", get_class($this)));
             try {
-                if(!empty(app($chield))) {
-                    $this->service = new $chield();
+                if(!empty(app($child))) {
+                    $this->service = new $child();
                 }
             } catch (BindingResolutionException $e) {}
         }
@@ -53,24 +53,50 @@ abstract class ControllerBase extends Controller
         return [];
     }
 
-    public function getUnidade(Request $request) {
+    public function getUnidade(Request $request)
+    {
         $result = null;
+
+        // Obtém headers do Petrvs
         $headers = $this->getPetrvsHeader($request);
-        $unidade_id = !empty($headers) && !empty($headers["unidade_id"]) ? $headers["unidade_id"] : ($request->hasSession() ? $request->session()->get("unidade_id") : "");
+
+        // Tenta obter unidade_id dos headers ou da sessão
+        $unidade_id = !empty($headers) && !empty($headers["unidade_id"])
+            ? $headers["unidade_id"]
+            : ($request->hasSession() ? $request->session()->get("unidade_id") : "");
+
+        // Usuário logado
         $usuario = self::loggedUser() ? Usuario::find(self::loggedUser()->id) : null;
-        $lotacao = $usuario?->lotacao?->unidade ?? $usuario?->areasTrabalho?->first()?->unidade ?? null;
-        if(!empty($unidade_id)) {
-            $usuario = Usuario::where("id", self::loggedUser()?->id)->with(["areasTrabalho" => function ($query) use ($unidade_id) {
-                $query->where("unidade_id", $unidade_id);
-            }, "areasTrabalho.unidade"])->first();
-            if(isset($usuario->areasTrabalho[0]) && !empty($usuario->areasTrabalho[0]->unidade_id)) {
+
+        // Tenta determinar a unidade a partir da lotação ou primeira área de trabalho
+        $lotacao = $usuario?->lotacao?->unidade
+            ?? $usuario?->areasTrabalho?->first()?->unidade
+            ?? null;
+
+        if (!empty($unidade_id)) {
+            // Carrega usuário com áreas de trabalho filtradas pela unidade_id
+            $usuario = Usuario::where("id", self::loggedUser()?->id)
+                ->with([
+                    "areasTrabalho" => function ($query) use ($unidade_id) {
+                        $query->where("unidade_id", $unidade_id);
+                    },
+                    "areasTrabalho.unidade"
+                ])
+                ->first();
+
+            // Retorna unidade da primeira área de trabalho, se disponível
+            if (isset($usuario->areasTrabalho[0]) && !empty($usuario->areasTrabalho[0]->unidade_id)) {
                 return $usuario->areasTrabalho[0]->unidade;
             }
-        } else if(!empty($lotacao)){ /* Caso não haja nenhuma unidade selecionada, utiliza a lotação (essa situação não deverá acontecer) */
+        } elseif (!empty($lotacao)) {
+            // Caso não haja unidade selecionada, utiliza a lotação
             return $lotacao;
         }
+
+        // Caso não encontre nenhuma unidade
         return $result;
     }
+
 
 /*     $tenant = Tenant::find('SENAPPEN');
 tenancy()->initialize($tenant); */
@@ -100,11 +126,13 @@ tenancy()->initialize($tenant); */
                 'values' => $this->service->searchText($data)
             ]);
         }  catch (IBaseException $e) {
+
             return response()->json(['error' => $e->getMessage()]);
         }
         catch (Throwable $e) {
+            Log::error('Erro capturado', ['exception' => $e]);
             $dataError = throwableToArrayLog($e);
-            Log::error($dataError);
+            //Log::error($dataError);
             return response()->json(['error' => "Codigo ".$dataError['code'].": Ocorreu um erro inesperado."]);
         }
     }
@@ -378,7 +406,7 @@ tenancy()->initialize($tenant); */
                 'success' => true,
                 'rows' => [$result]
             ]);
-        } 
+        }
         catch (IBaseException $e) {
             return response()->json(['error' => $e->getMessage()]);
         }
@@ -418,7 +446,7 @@ tenancy()->initialize($tenant); */
             ]);
             return response()->json([
                 'success' => true,
-                'rows' => [$result] 
+                'rows' => [$result]
             ]);
         }  catch (IBaseException $e) {
             return response()->json(['error' => $e->getMessage()]);

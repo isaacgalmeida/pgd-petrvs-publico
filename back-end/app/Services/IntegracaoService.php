@@ -30,6 +30,8 @@ use App\Services\Siape\Gestor\Integracao as GestorIntegracao;
 use App\Services\Siape\Servidor\Integracao;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use App\Facades\SiapeLog;
+use stdClass;
 
 class IntegracaoService extends ServiceBase
 {
@@ -75,7 +77,7 @@ class IntegracaoService extends ServiceBase
 
   private function loadingTenantConfigurationMiddleware($tenantId): void
   {
-    if(is_null($tenantId)) return;
+    if (is_null($tenantId)) return;
     $tenantConfigurations = new TenantConfigurationsService();
     $tenantConfigurations->handle($tenantId);
   }
@@ -111,7 +113,7 @@ class IntegracaoService extends ServiceBase
       return ["unidade_id" => $unidade->unidade_pai_id, "path" => $unidade->path_pai];
     } else if (!empty($this->unidadesInseridas[$unidade->pai_servo])) {
       return $this->unidadesInseridas[$unidade->pai_servo];
-    } else if ($pai = current(array_filter($this->unidadesSelecionadas, fn ($element) => $element->id_servo == $unidade->pai_servo))) {
+    } else if ($pai = current(array_filter($this->unidadesSelecionadas, fn($element) => $element->id_servo == $unidade->pai_servo))) {
       return $this->deepReplaceUnidades($pai, $entidade_id);
     }
   }
@@ -135,7 +137,7 @@ class IntegracaoService extends ServiceBase
         $values[':data_modificacao'] = $this->UtilService->asDateTime($unidade->data_modificacao_siape);
         $this->unidadesInseridas[$unidade->id_servo] = ["unidade_id" => $values[':id'], "path" => $values[':path']];
         $unidadeJaExisteNoBanco = Unidade::where("codigo", $unidade->id_servo)->first();
-        if($unidadeJaExisteNoBanco){
+        if ($unidadeJaExisteNoBanco) {
           throw new BadGatewayException(sprintf("Já existe uma unidade para o código %s", $unidade->id_servo));
         }
         try {
@@ -252,8 +254,11 @@ class IntegracaoService extends ServiceBase
     $dados['gravar_arquivos_locais'] = $this->storeLocalFiles; // Atualiza esse parâmetro para que seja salvo no banco corretamente.
     $this->sincronizacao($inputs);
     $unidadeLogin = Auth::user()->areasTrabalho[0]->unidade;
-    Log::alert("log 2");
-    return $this->store(array_merge($dados, ['usuario_id' => $usuario_id, 'data_execucao' => $this->unidadeService->hora($unidadeLogin->id), 'resultado' => json_encode($this->result)]), null);
+    return $this->store(array_merge($dados, [
+      'usuario_id' => $usuario_id,
+      'data_execucao' => $this->unidadeService->hora($unidadeLogin->id),
+      'resultado' => json_encode($this->result)
+    ]), null);
   }
 
   /**
@@ -262,7 +267,7 @@ class IntegracaoService extends ServiceBase
    */
   public function sincronizar($inputs)
   {
-    $this->logSiape("Iniciando sincronização de dados do SIAPE", [], Tipo::INFO);
+    SiapeLog::info("Iniciando sincronização de dados do SIAPE");
     $inputs['entidade_id'] = $inputs['entidade'];
     $this->echo = true;
 
@@ -283,8 +288,8 @@ class IntegracaoService extends ServiceBase
 
     $this->sincronizacao($inputs);
     $this->logSiape("Sincronização de dados do SIAPE finalizada", [], Tipo::INFO);
-    
-    return $this->store([
+
+    $integracao = $this->store([
       'entidade_id' => $inputs['entidade'],
       'atualizar_unidades' => $this->validaInput($inputs['unidades']),
       'atualizar_servidores' => $this->validaInput($inputs['servidores']),
@@ -294,24 +299,29 @@ class IntegracaoService extends ServiceBase
       'usuario_id' => null,
       'data_execucao' => Carbon::now(),
       'resultado' => json_encode($this->result, JSON_UNESCAPED_UNICODE)
-    ], null)->resultado;
+    ], null);
+
+    return $integracao->resultado;
   }
-  private function validaInput($input) : bool{
-      if(is_bool($input)){
-        return $input;
-      }
-      return $input == "false" ? false : true;
+
+  private function validaInput($input): bool
+  {
+    if (is_bool($input)) {
+      return $input;
+    }
+    return $input == "false" ? false : true;
   }
+
   public function sincronizacao($inputs)
   {
-    ob_start(); // Inicia o buffer de saída.
-    ob_implicit_flush(true); // Libera a chamada explícita para o output buffer.
+    //ob_start(); // Inicia o buffer de saída.
+    // ob_implicit_flush(true); // Libera a chamada explícita para o output buffer.
     ini_set('memory_limit', '-1');
     ini_set('default_socket_timeout', 3000); // 5 minutos.
     set_time_limit(0);
     /**
-      * @var IntegracaoService $self
-      */
+     * @var IntegracaoService $self
+     */
     $self = $this;
     $this->result = [
       'unidades' => ['Resultado' => 'Não foi executado!', 'Observações' => [], 'Falhas' => []],
@@ -324,10 +334,10 @@ class IntegracaoService extends ServiceBase
     LogError::newWarn("Sincronizar Entidade: " . $entidade_id);
     // Atualização das unidades.
     if (!empty($inputs['unidades']) && $inputs['unidades'] && !empty($entidade_id)) {
-      $this->logSiape("Iniciando sincronização de Unidades", [], Tipo::INFO);
+      SiapeLog::info("Iniciando sincronização de Unidades");
       try {
         $uos = $this->IntegracaoSiapeService->retornarUorgs()["uorg"];
-        if ($this->echo) $this->imprimeNoTerminal("Concluída a fase de obtenção dos dados das unidades informados pelo SIAPE!.....");
+        SiapeLog::info("Concluída a fase de obtenção dos dados das unidades informados pelo SIAPE!.....");
 
         DB::transaction(function () use (&$uos, &$self) {
           foreach ($uos as $uo) {
@@ -413,13 +423,13 @@ class IntegracaoService extends ServiceBase
               ];
 
               if (empty($query_iu->value('id_servo'))) {
-                $this->logSiape("Salvando unidade na tabela Integracao unidade", $unidade, Tipo::INFO);
+                SiapeLog::info("Salvando unidade na tabela Integracao unidade", $unidade);
                 $registro = new IntegracaoUnidade($unidade);
                 $registro->save();
               } else if ((!empty($query_iu->value('id_servo'))  &&  ($uorg_siape_data_modificacao > $iu_data_modificacao || $uorg_siape_data_modificacao > $u_data_modificacao)) ||
                 (!empty($query_iu->value('id_servo')) && $query_iu->value('deleted_at'))
               ) {
-                $this->logSiape("Atualizando unidade na tabela Integracao unidade", $unidade, Tipo::INFO);
+                SiapeLog::info("Atualizando unidade na tabela Integracao unidade", $unidade);
                 // Atualiza informações de unidade que já existe na tabela integracao_unidades ou remove dados(soft delete).
                 $query_iu->update($unidade);
               }
@@ -432,13 +442,13 @@ class IntegracaoService extends ServiceBase
         As unidades que não existem mais no SIAPE/WSO2 serão desativadas.
         */
         $unidades_siape =  array_map(function ($uorg) {
-            if (!empty($uorg['id_servo'])) return $uorg['id_servo'];
+          if (!empty($uorg['id_servo'])) return $uorg['id_servo'];
         }, $uos);
 
         $unidades_integracao = DB::table("integracao_unidades")->get('id_servo')->values('id_servo')->toArray();
 
         $unidades_integracao = array_map(function ($uorg) {
-            if(!empty($uorg->id_servo)) return $uorg->id_servo;
+          if (!empty($uorg->id_servo)) return $uorg->id_servo;
         }, $unidades_integracao);
 
         //TODO esse codigo será removido e passado para um job a parte.
@@ -447,8 +457,7 @@ class IntegracaoService extends ServiceBase
         // $datahora_remocao = Carbon::now();
         // $unidades_integracao_remover ? DB::table('integracao_unidades')->wherein('id_servo', $unidades_integracao_remover)->update(['deleted_at' => $datahora_remocao]) : true;
         // $this->logSiape("Unidades removidas da tabela integracao_unidades", $unidades_integracao_remover, Tipo::INFO);
-        $this->logSiape("Concluída a fase de sincronização de Unidades", [], Tipo::INFO);
-        if ($this->echo) $this->imprimeNoTerminal("Concluída a fase de reconstrução da tabela integracao_unidades!.....");
+        SiapeLog::info("Concluída a fase de reconstrução da tabela integracao_unidades!.....");
         $n = IntegracaoUnidade::count();
         $this->atualizaLogs($this->logged_user_id, 'integracao_unidades', 'todos os registros', 'ADD', ['Observação' => 'Total de unidades importadas do SIAPE: ' . $n . ' (apenas ATIVAS)']);
         array_push($this->result['unidades']["Observações"], 'Total de unidades importadas do SIAPE: ' . $n . ' (apenas ATIVAS)');
@@ -480,8 +489,9 @@ class IntegracaoService extends ServiceBase
           "LEFT JOIN unidades un_atual_pai ON (un_atual_pai.id = u.unidade_pai_id) " .
           "LEFT JOIN unidades und ON (iu.pai_servo = und.codigo) " .
           "LEFT JOIN cidades c ON (iu.municipio_ibge = c.codigo_ibge) " .
+          "LEFT JOIN cidades c2 ON u.cidade_id = c2.id " .
           "" .
-          "WHERE (u.id is null OR iu.nomeuorg != u.nome " .
+          "WHERE (u.id is null OR c2.id != c.id OR iu.nomeuorg != u.nome " .
           "OR iu.siglauorg != u.sigla " .
           "OR iu.pai_servo != " .
           "(SELECT codigo as cod_unidade_pai FROM unidades u2 " .
@@ -491,9 +501,10 @@ class IntegracaoService extends ServiceBase
         $this->unidadesSelecionadas = DB::select($consulta_sql);
         // Executa atualizações das unidades caso necessário.
         if (!empty($this->unidadesSelecionadas)) {
+          SiapeLog::info("Iniciando atualização de unidades selecionadas", ['count' => count($this->unidadesSelecionadas)]);
           DB::transaction(function () use (&$self, $entidade_id) {
             foreach ($self->unidadesSelecionadas as $unidade) {
-              $this->logSiape("Iniciando atualização de unidade", (array) $unidade, Tipo::INFO);
+              SiapeLog::info("Iniciando atualização de unidade", (array) $unidade);
               $db_result = $self->deepReplaceUnidades($unidade, $entidade_id);
             }
           });
@@ -519,24 +530,22 @@ class IntegracaoService extends ServiceBase
           count($this->unidadesAlteradas) . (count($this->unidadesAlteradas) == 1 ? ' unidade manteve sua hierarquia mas sofreu alteração em outros dados e foi atualizada!' : ' unidades mantiveram sua hierarquia mas sofreram alteração em outros dados e foram atualizadas!'),
           $this->inativadas . ($this->inativadas == 1 ? ' unidade do Petrvs foi INATIVADA porque não existe ou já está inativa no SIAPE!' : ' unidades do Petrvs foram INATIVADAS porque não existem ou já estão inativas no SIAPE!'),
           $this->ativadas . ($this->ativadas == 1 ? ' unidade foi ATIVADA no Petrvs porque constava como inativa mas ainda está ativa no SIAPE!' : ' unidades foram ATIVADAS no Petrvs porque constavam como inativas mas ainda estão ativas no SIAPE!')
-        ], fn ($o) => intval(substr($o, 0, strpos($o, 'unidade') - 1)) > 0)];
+        ], fn($o) => intval(substr($o, 0, strpos($o, 'unidade') - 1)) > 0)];
         // Unidades que foram removidas em integracao_unidades vão permanecer no sistema por questões de integridade.
       } catch (Throwable $e) {
-        Log::error(sprintf("Erro ao importar unidades: %s", $e->getMessage()), throwableToArray($e));
+        SiapeLog::info(sprintf("Erro ao importar unidades: %s", $e->getMessage()));
         LogError::newError("Erro ao importar unidades", $e);
         $this->result['unidades']['Resultado'] = 'ERRO: ' . $e->getMessage();
       }
     }
-    $this->logSiape("Concluída a fase de atualização da tabela unidades ou opção não selecionada!", [], Tipo::INFO);
-    if ($this->echo) $this->imprimeNoTerminal("Concluída a fase de atualização da tabela unidades ou opção não selecionada!.....");
+    SiapeLog::info("Concluída a fase de atualização da tabela unidades ou opção não selecionada!.....");
 
     if (!empty($inputs["servidores"]) && $inputs["servidores"] && !empty($entidade_id)) {
-      $this->logSiape("Iniciando sincronização de Servidores", [], Tipo::INFO);
+      SiapeLog::info("Iniciando sincronização de Servidores");
       try {
         $servidores = [];
-          $servidores = $this->IntegracaoSiapeService->retornarServidores()["Pessoas"];
-        $this->logSiape("Concluída a fase de obtenção dos dados dos servidores informados pelo SIAPE", [], Tipo::INFO);
-        if ($this->echo) $this->imprimeNoTerminal("Concluída a fase de obtenção dos dados dos servidores informados pelo SIAPE.....");
+        $servidores = $this->IntegracaoSiapeService->retornarServidores()["Pessoas"];
+        SiapeLog::info("Concluída a fase de obtenção dos dados dos servidores informados pelo SIAPE.....");
 
         DB::transaction(function () use (
           &$servidores,
@@ -545,19 +554,19 @@ class IntegracaoService extends ServiceBase
           $integracaoServidoresRepository = new IntegracaoServidorRepository(new IntegracaoServidor);
           try {
             $integracaoServidorProcessar =  new Integracao(
-              $integracaoServidoresRepository, $this->UtilService
+              $integracaoServidoresRepository,
+              $this->UtilService
             );
           } catch (Throwable $e) {
             LogError::newError("Erro ao truncar a tabela integracao_servidores", $e);
-            Log::error(sprintf("Erro ao truncar a tabela integracao_servidores: %s", $e->getMessage()), throwableToArray($e));
+            SiapeLog::info(sprintf("Erro ao truncar a tabela integracao_servidores: %s", $e->getMessage()), throwableToArray($e));
           }
           $this->logSiape("Iniciando processo de atualização de servidores", [], Tipo::INFO);
           $integracaoServidorProcessar->setServidores($servidores)->setEcho($this->echo)->setIntegracaoConfig($this->integracao_config)
-          ->setResult($this->result);
+            ->setResult($this->result);
           $integracaoServidorProcessar->processar();
 
           $this->result = $integracaoServidorProcessar->getResult();
-
         });
 
         /**
@@ -582,11 +591,7 @@ class IntegracaoService extends ServiceBase
         isr.telefone,
         isr.data_modificacao AS data_modificacao,
         u.data_modificacao AS data_modificacao_anterior,
-        isr.data_nascimento,
-        u.nome_jornada AS nome_jornada_antigo,
-        isr.nome_jornada AS nome_jornada,
-        u.cod_jornada AS cod_jornada_antigo,
-        isr.cod_jornada AS cod_jornada
+        isr.data_nascimento
     FROM
         integracao_servidores isr
         LEFT JOIN usuarios u ON (isr.cpf = u.cpf)
@@ -596,8 +601,6 @@ class IntegracaoService extends ServiceBase
         isr.matriculasiape != u.matricula OR
         isr.nomeguerra != u.apelido OR
         isr.telefone != u.telefone OR
-        (isr.nome_jornada != u.nome_jornada OR isr.nome_jornada IS NOT NULL AND u.nome_jornada IS NULL) OR
-        (isr.cod_jornada != u.cod_jornada OR isr.cod_jornada IS NOT NULL AND u.cod_jornada IS NULL) OR
         (isr.data_modificacao > u.data_modificacao OR isr.data_modificacao IS NOT NULL AND u.data_nascimento IS NULL )
         "
         );
@@ -605,8 +608,6 @@ class IntegracaoService extends ServiceBase
           "nome = :nome, apelido = :nomeguerra, " .
           "email = :email, matricula = :matricula, " .
           "telefone = :telefone, " .
-          "cod_jornada = :cod_jornada, " .
-          "nome_jornada = :nome_jornada, " .
           "data_nascimento = :data_nascimento, " .
           "data_modificacao = :data_modificacao WHERE id = :id";
 
@@ -614,24 +615,26 @@ class IntegracaoService extends ServiceBase
         // Se não conseguir mudar, avisar no log uma vez que virá mensagem do salvarIntegrantes.
 
         $atualizacoesLotacoes = DB::select(
-          "SELECT usuario.id AS usuario_id, isr.nome AS nome, ".
-          "  u.codigo AS exercicio_antigo, ".
-          "  isr.codigo_servo_exercicio AS exercicio_atual, ".
-          "  u.id AS exercicio_antigo_id, ".
+          "SELECT usuario.id AS usuario_id, isr.nome AS nome, " .
+            "  u.codigo AS exercicio_antigo, " .
+            "  isr.codigo_servo_exercicio AS exercicio_atual, " .
+            "  u.id AS exercicio_antigo_id, " .
 
-          "(SELECT u2.id ".
-          "FROM unidades AS u2 ".
-          "WHERE isr.codigo_servo_exercicio = u2.codigo) AS exercicio_atual_id, ".
+            "(SELECT u2.id " .
+            "FROM unidades AS u2 " .
+            "WHERE isr.codigo_servo_exercicio = u2.codigo LIMIT 1) AS exercicio_atual_id, " .
 
-          " uia.atribuicao AS atribuicao ".
+            " uia.atribuicao AS atribuicao " .
 
-          "FROM unidades_integrantes_atribuicoes AS uia ".
-          "JOIN unidades_integrantes AS ui ON ui.id = uia.unidade_integrante_id ".
-          "JOIN unidades AS u ON ui.unidade_id = u.id ".
-          "JOIN usuarios AS usuario ON ui.usuario_id = usuario.id ".
-          "JOIN integracao_servidores AS isr ON isr.cpf = usuario.cpf ".
-          "WHERE uia.atribuicao = 'LOTADO' AND u.codigo <> isr.codigo_servo_exercicio and ui.deleted_at IS NULL ".
-          "ORDER BY exercicio_antigo ASC");
+            "FROM unidades_integrantes_atribuicoes AS uia " .
+            "JOIN unidades_integrantes AS ui ON ui.id = uia.unidade_integrante_id " .
+            "JOIN unidades AS u ON ui.unidade_id = u.id " .
+            "JOIN usuarios AS usuario ON ui.usuario_id = usuario.id " .
+            "JOIN integracao_servidores AS isr ON isr.cpf = usuario.cpf " .
+            "WHERE uia.atribuicao = 'LOTADO' AND u.codigo <> isr.codigo_servo_exercicio and ui.deleted_at IS NULL " .
+            "AND uia.deleted_at IS NULL " .
+            "ORDER BY exercicio_antigo ASC"
+        );
 
 
         $sqlServidoresInseridosNaoLotados = DB::select(
@@ -648,10 +651,10 @@ class IntegracaoService extends ServiceBase
               WHERE uia.atribuicao = 'LOTADO'
                 AND uia.deleted_at IS NULL
               GROUP BY u.id)"
-        );  
+        );
         $atualizacoesLotacoesResult = [];
 
-        DB::transaction(function () use (&$atualizacoesDados, &$sqlUpdateDados, &$atualizacoesLotacoes, &$sqlServidoresInseridosNaoLotados ,&$atualizacoesLotacoesResult) {
+        DB::transaction(function () use (&$atualizacoesDados, &$sqlUpdateDados, &$atualizacoesLotacoes, &$sqlServidoresInseridosNaoLotados, &$atualizacoesLotacoesResult) {
           /**
            * Atualiza os dados pessoais de todos os servidores ATIVOS presentes na tabela USUARIOS.
            * ESTA ROTINA NÃO DEVE INSERIR NOVOS SERVIDORES.
@@ -664,7 +667,8 @@ class IntegracaoService extends ServiceBase
           // $unidadeExercicioRaizId = $unidadeExercicioRaiz->id;
           if (!empty($atualizacoesDados)) {
             foreach ($atualizacoesDados as $linha) {
-              Log::channel('siape')->info("Atualizando dados do servidor: ", [json_encode($linha)]);
+
+              SiapeLog::info("Atualizando dados do servidor CPF: " . $linha->cpf_servidor);
 
               $this->verificaSeOEmailJaEstaVinculadoEAlteraParaEmailFake($linha->emailfuncional, $linha->cpf_servidor);
 
@@ -674,8 +678,6 @@ class IntegracaoService extends ServiceBase
                 'email'         => $linha->emailfuncional,
                 'matricula'     => $linha->matriculasiape,
                 'telefone'      => $linha->telefone,
-                'cod_jornada'      => $linha->cod_jornada,
-                'nome_jornada'      => $linha->nome_jornada,
                 'id'            => $linha->id,
                 'data_modificacao' => $this->UtilService->asDateTime($linha->data_modificacao),
                 'data_nascimento' => $linha->data_nascimento,
@@ -683,11 +685,11 @@ class IntegracaoService extends ServiceBase
             }
           };
 
-          if(!empty($sqlServidoresInseridosNaoLotados)){
-            foreach($sqlServidoresInseridosNaoLotados as $inserirLotacao){
+          if (!empty($sqlServidoresInseridosNaoLotados)) {
+            foreach ($sqlServidoresInseridosNaoLotados as $inserirLotacao) {
 
-              if(empty($inserirLotacao->unidade_id)){
-                Log::channel('siape')->info(sprintf("O servidor cpf #%s não tem unidade de  exercicio, não será alocado", $inserirLotacao['cpf']));
+              if (empty($inserirLotacao->unidade_id)) {
+                SiapeLog::info(sprintf("O servidor cpf #%s não tem unidade de  exercicio, não será alocado", $inserirLotacao['cpf']));
                 continue;
               }
 
@@ -700,14 +702,13 @@ class IntegracaoService extends ServiceBase
                 $dbResult = $this->unidadeIntegrante->salvarIntegrantes($vinculo, false);
               } catch (\Throwable $th) {
                 report($th);
-                LogError::newWarn("IntegracaoService: Durante integração não foi possível alterar lotação!", [$dbResult, $vinculo]);
+                SiapeLog::error("IntegracaoService: Durante integração não foi possível alterar lotação!", [$dbResult, $vinculo]);
               }
-              if(!$dbResult){
-                LogError::newWarn("IntegracaoService: Durante integração não foi possível alterar lotação!", [$dbResult, $vinculo]);
-              } else{
-                  array_push($atualizacoesLotacoesResult, $dbResult);
+              if (!$dbResult) {
+                SiapeLog::error("IntegracaoService: Houve uma falha na tentantiva de alterar a lotação", [$dbResult, $vinculo]);
+              } else {
+                array_push($atualizacoesLotacoesResult, $dbResult);
               }
-
             }
           }
 
@@ -716,12 +717,12 @@ class IntegracaoService extends ServiceBase
               $usuarioId = $linha->usuario_id;
 
               if (isset($linha->exercicio_atual_id)) {
-                    $unidadeExercicioId = $linha->exercicio_atual_id;
+                $unidadeExercicioId = $linha->exercicio_atual_id;
               } else {
-                    //FIXME não sera mais alocado em nenhuma unidade se não existir.
-                    // $unidadeExercicioId = $unidadeExercicioRaizId;
-                    LogError::newWarn("IntegracaoService: Durante atualização de lotações, agente público informou unidade de exercício não ativa ou inexistente.", [$linha]);
-                    continue;
+                //FIXME não sera mais alocado em nenhuma unidade se não existir.
+                // $unidadeExercicioId = $unidadeExercicioRaizId;
+                SiapeLog::error("IntegracaoService: Durante atualização de lotações, agente público informou unidade de exercício não ativa ou inexistente.", [$linha]);
+                continue;
               }
 
               $vinculo = array([
@@ -732,17 +733,17 @@ class IntegracaoService extends ServiceBase
               try {
                 $dbResult = $this->unidadeIntegrante->salvarIntegrantes($vinculo, false);
               } catch (\Throwable $th) {
-                LogError::newWarn("IntegracaoService: Durante integração não foi possível alterar lotação!", [$dbResult, $vinculo]);
+                SiapeLog::error("IntegracaoService: Durante integração não foi possível alterar lotação!", [$dbResult, $vinculo]);
               }
-              if(!$dbResult){
-                LogError::newWarn("IntegracaoService: Durante integração não foi possível alterar lotação!", [$dbResult, $vinculo]);
-              } else{
-                  array_push($atualizacoesLotacoesResult, $dbResult);
+              if (!$dbResult) {
+                SiapeLog::error("IntegracaoService: Houve uma falha na tentantiva de alterar a lotação", [$dbResult, $vinculo]);
+              } else {
+                array_push($atualizacoesLotacoesResult, $dbResult);
               }
             }
           }
-          $this->logSiape("Concluída a fase de atualização de servidores que apresentaram alteração nos seus dados pessoais!", [], Tipo::INFO);
-          if ($this->echo) $this->imprimeNoTerminal('Concluída a fase de atualização de servidores que apresentaram alteração nos seus dados pessoais!.....');
+          SiapeLog::info('Concluída a fase de atualização de servidores que apresentaram alteração nos seus dados pessoais!.....');
+
           $n = count($atualizacoesDados);
           $nLotacoes = count($atualizacoesLotacoes);
 
@@ -767,9 +768,7 @@ class IntegracaoService extends ServiceBase
             "isr.codigo_servo_exercicio as exercicio, " .
             "isr.situacao_funcional as situacao_funcional, " .
             "isr.data_modificacao as data_modificacao, " .
-            "isr.funcoes as gestor, " .
-            "isr.nome_jornada as nome_jornada, " .
-            "isr.cod_jornada as cod_jornada " .
+            "isr.funcoes as gestor " .
             "FROM integracao_servidores as isr LEFT JOIN usuarios as u " .
             "ON isr.cpf = u.cpf " .
             "WHERE u.cpf is NULL";
@@ -779,9 +778,13 @@ class IntegracaoService extends ServiceBase
           $usuarioComum = $this->integracao_config["perfilComum"];
           $perfilParticipante = $this->nivelAcessoService->getPerfilParticipante();
           $perfilParticipanteId = null;
-          if(!empty($perfilParticipante)) $perfilParticipanteId = $perfilParticipante->id;
+          if (!empty($perfilParticipante)) $perfilParticipanteId = $perfilParticipante->id;
 
           if (empty($perfilParticipanteId)) throw new ServerException("ValidateUsuario", "Perfil usuário comum (" . $usuarioComum . ") não encontrado no banco de dados. Verificar configuração no painel SaaS.\n[ver XXX_XXX]");
+
+          if (empty($vinculos_isr) || !is_array($vinculos_isr)) {
+            SiapeLog::info("Não foram encontrados servidores para serem inseridos na tabela usuários.");
+          }
 
           foreach ($vinculos_isr as $v_isr) {
             $v_isr = $this->UtilService->object2array($v_isr);
@@ -800,13 +803,11 @@ class IntegracaoService extends ServiceBase
               'exercicio' => $this->UtilService->valueOrDefault($v_isr['exercicio']),
               'uf' => $this->UtilService->valueOrDefault($v_isr['uf'], null),
               'data_modificacao' => $this->UtilService->asDateTime($v_isr['data_modificacao']),
-              'cod_jornada' => $this->UtilService->valueOrDefault($v_isr['cod_jornada'], null),
-              'nome_jornada' => $this->UtilService->valueOrDefault($v_isr['nome_jornada'], null),
             ]);
 
             $this->verificaSeOEmailJaEstaVinculadoEAlteraParaEmailFake($registro->email, $registro->cpf);
 
-            $this->logSiape("Inserindo servidor na tabela Usuários", $registro->toArray(), Tipo::INFO);
+            SiapeLog::info("Inserindo servidor na tabela Usuários", $registro->toArray());
             $registro->save();
 
             $usuarioId = $registro->id;
@@ -816,7 +817,7 @@ class IntegracaoService extends ServiceBase
             isset($unidadeExercicioId->id) ? $unidadeExercicioId = $unidadeExercicioId->id : $unidadeExercicioId = null;
 
             if (is_null($unidadeExercicioId)) {
-              Log::channel('siape')->info(sprintf("O servidor cpf #%s não tem unidade de  exercicio, não será alocado", $registro['cpf']));
+              SiapeLog::info(sprintf("O servidor cpf #%s não tem unidade de  exercicio, não será alocado", $registro['cpf']));
               continue;
               // $unidadeExercicioId = $unidadeExercicioRaizId;
               // LogError::newWarn("IntegracaoService: Durante integração, foi definido o exercício na unidadeRaiz(" .
@@ -841,19 +842,17 @@ class IntegracaoService extends ServiceBase
               'atribuicoes' => $atribuicoes,
             ]);
 
-            /* QueryMan, Farias, criou rotina para gerar exercícios (lotação)
-            de forma simplificada. Aqui é criado o exercício vinculando
-            o usuário a unidade. Em caso de dúvida, olhar rotina. */
             $this->unidadeIntegrante->salvarIntegrantes($vinculo, false);
           }
-          if ($this->echo) $this->imprimeNoTerminal('Concluída a fase de atualização das lotações dos servidores!.....');
+          SiapeLog::info('Concluída a fase de atualização das lotações dos servidores!.....');
         });
 
         $this->result['servidores']['Resultado'] = 'Sucesso';
         array_push($this->result['servidores']["Observações"], 'Na tabela Usuários constam agora ' .
           Usuario::count() . ' servidores!');
       } catch (Throwable $e) {
-        $this->logSiape("Erro ao importar servidores", throwableToArray($e), Tipo::ERROR);
+        report($e);
+        SiapeLog::info("Erro ao importar servidores: " . $e->getMessage());
         LogError::newError("Erro ao importar servidores", $e);
         $this->result["servidores"]['Resultado'] = 'ERRO: ' . $e->getMessage() . ' - Linha: ' . $e->getLine();
       }
@@ -867,44 +866,74 @@ class IntegracaoService extends ServiceBase
     if (!empty($inputs["gestores"]) && !$inputs["gestores"]) {
       $this->result["gestores"]['Resultado'] = 'Os gestores não foram atualizados, conforme solicitado!';
     } elseif ($this->result['unidades']['Resultado'] == 'Sucesso' && $this->result['servidores']['Resultado'] == 'Sucesso') {
-      $this->logSiape("Iniciando a fase de reconstrução das funções de chefia!", [], Tipo::INFO);
-      if ($this->echo) $this->imprimeNoTerminal("Iniciando a fase de reconstrução das funções de chefia!.....");
+      SiapeLog::info("Iniciando a fase de reconstrução das funções de chefia!.....");
       try {
         DB::beginTransaction();
 
         $chefes = [];
-       
 
-      $chefes = DB::table('integracao_unidades as iu')
+        $primeira = DB::table('integracao_unidades as iu')
           ->join('unidades as u', 'iu.codigo_siape', '=', 'u.codigo')
-          ->leftJoin('usuarios as chefe', function($join) {
-              $join->on('iu.cpf_titular_autoridade_uorg', '=', 'chefe.cpf')
-                  ->whereNull('chefe.deleted_at');
+          ->leftJoin('usuarios as chefe', function ($join) {
+            $join->on('iu.cpf_titular_autoridade_uorg', '=', 'chefe.cpf')
+              ->whereNull('chefe.deleted_at');
           })
-          ->leftJoin('integracao_servidores as is_chef', function($join) {
-              $join->on('iu.cpf_titular_autoridade_uorg', '=', 'is_chef.cpf')
-                  ->where('is_chef.vinculo_ativo', '=', 1);
+          ->leftJoin('integracao_servidores as is_chef', function ($join) {
+            $join->on('iu.cpf_titular_autoridade_uorg', '=', 'is_chef.cpf')
+              ->where('is_chef.vinculo_ativo', '=', 1);
           })
-          ->leftJoin('usuarios as substituto', function($join) {
-              $join->on('iu.cpf_substituto_autoridade_uorg', '=', 'substituto.cpf')
-                  ->whereNull('substituto.deleted_at');
+          ->join('unidades_integrantes as ui', function ($join) {
+            $join->on('chefe.id', '=', 'ui.usuario_id')
+              ->on('u.id',      '=', 'ui.unidade_id');
           })
-          ->leftJoin('integracao_servidores as is_sub', function($join) {
-              $join->on('iu.cpf_substituto_autoridade_uorg', '=', 'is_sub.cpf')
-                  ->where('is_sub.vinculo_ativo', '=', 1);
+          ->join('unidades_integrantes_atribuicoes as uia', function ($join) {
+            $join->on('ui.id', '=', 'uia.unidade_integrante_id')
+              ->where('uia.atribuicao', '=', 'LOTADO')
+              ->whereNull('uia.deleted_at');
           })
           ->whereNull('u.deleted_at')
-          ->select(
-              'u.id as id_unidade',
-              'chefe.id as id_chefe',
-              'substituto.id as id_substituto'
-          )
-          ->get()->map(function($item) {
-            return (array) $item; 
-        })
-        ->toArray();
+          ->whereNotExists(function ($query) {
+            $query->select(DB::raw(1))
+              ->from('unidades_integrantes as ui2')
+              ->join('unidades_integrantes_atribuicoes as uia2', function ($join) {
+                $join->on('ui2.id', '=', 'uia2.unidade_integrante_id')
+                  ->where('uia2.atribuicao', '=', 'GESTOR')
+                  ->whereNull('uia2.deleted_at');
+              })
+              ->whereColumn('ui2.usuario_id', 'chefe.id')
+              ->whereNull('ui2.deleted_at');
+          })
+          ->select([
+            'u.id           as id_unidade',
+            'chefe.id       as id_chefe',
+          ]);
 
-        if ($this->echo) $this->imprimeNoTerminal("Concluída a fase de montagem do array de chefias!.....");
+        $segunda = DB::table('integracao_unidades as iu')
+          ->join('unidades as u', 'iu.codigo_siape', '=', 'u.codigo')
+          ->join('unidades_integrantes as ui', function ($join) {
+            $join->on('ui.unidade_id', '=', 'u.id')
+              ->whereNull('ui.deleted_at');
+          })
+          ->join('unidades_integrantes_atribuicoes as uia', function ($join) {
+            $join->on('ui.id', '=', 'uia.unidade_integrante_id')
+              ->where('uia.atribuicao', '=', 'GESTOR')
+              ->whereNull('uia.deleted_at');
+          })
+          ->whereNull('iu.cpf_titular_autoridade_uorg')
+          ->select([
+            'u.id                                    as id_unidade',
+            DB::raw('iu.cpf_titular_autoridade_uorg as id_chefe'),
+          ]);
+
+        $chefes = $primeira
+          ->unionAll($segunda)
+          ->get()
+          ->map(fn($item) => (array) $item)
+          ->toArray();
+
+
+
+        SiapeLog::info("Concluída a fase de montagem do array de chefias!.....");
 
         $integracaoChefia = new GestorIntegracao(
           $chefes,
@@ -916,19 +945,19 @@ class IntegracaoService extends ServiceBase
         );
         $integracaoChefia->processar();
         $messagensRetorno = $integracaoChefia->getMessage();
-        Log::info("Mensagens de retorno da atualização de chefias: ", $messagensRetorno);
+        SiapeLog::info("Mensagens de retorno da atualização de chefias: ", $messagensRetorno);
 
         DB::commit();
         $this->result["gestores"]['Resultado'] = 'Sucesso';
         $this->result["gestores"]['Observações'] = [
-           'Sucesso: '.count($messagensRetorno['sucesso']) . ' chefias foram atualizadas com sucesso!',
-          'Erro: '.count($messagensRetorno['erro']) . ' chefias não puderam ser atualizadas!',
-          'Aviso: '.count($messagensRetorno['vazio']) . ' chefias vazias ou não encontradas!',
+          'Sucesso: ' . count($messagensRetorno['sucesso']) . ' chefias foram atualizadas com sucesso!',
+          'Erro: ' . count($messagensRetorno['erro']) . ' chefias não puderam ser atualizadas!',
+          'Aviso: ' . count($messagensRetorno['vazio']) . ' chefias vazias ou não encontradas!',
         ];
-        
       } catch (Throwable $e) {
         DB::rollback();
-        $this->logSiape("Erro ao atualizar os gestores (titulares/substitutos)", throwableToArray($e), Tipo::ERROR);
+        report($e);
+        SiapeLog::error("Erro ao atualizar os gestores (titulares/substitutos)");
         LogError::newError("Erro ao atualizar os gestores (titulares/substitutos)", $e);
         $this->result["gestores"]['Resultado'] = 'ERRO: ' . $e->getMessage();
       }
@@ -937,20 +966,20 @@ class IntegracaoService extends ServiceBase
         'ou ainda porque houve alguma falha em suas atualizações! Os gestores só são atualizados quando as Unidades ' .
         'e os Servidores são atualizados e AMBOS com sucesso.';
     }
-    $this->logSiape("Concluída a fase de reconstrução das funções de chefia!", [], Tipo::INFO);
+    SiapeLog::info("Concluída a fase de reconstrução das funções de chefia!");
   }
 
-  private function verificaSeOEmailJaEstaVinculadoEAlteraParaEmailFake(string $email,string $cpf) : void
+  private function verificaSeOEmailJaEstaVinculadoEAlteraParaEmailFake(string $email, string $cpf): void
   {
-    $usuario = Usuario::where('email', $email)->where('cpf', '!=',$cpf)->first();
+    $usuario = Usuario::where('email', $email)->where('cpf', '!=', $cpf)->first();
     if (!empty($usuario)) {
       LogError::newError(sprintf("IntegracaoService: Durante integração, foi encontrado email duplicado na tabela usuários. CPF: %s, Email: %s", $cpf, $email));
       $novoemail = $usuario->cpf . "@petrvs.gov.br";
-      $outroUsuarioComesseEmail = Usuario::where('email', $novoemail)->where('cpf', '!=',$usuario->cpf)->first();
-      if(!empty($outroUsuarioComesseEmail)){
+      $outroUsuarioComesseEmail = Usuario::where('email', $novoemail)->where('cpf', '!=', $usuario->cpf)->first();
+      if (!empty($outroUsuarioComesseEmail)) {
         $this->verificaSeOEmailJaEstaVinculadoEAlteraParaEmailFake($novoemail, $usuario->cpf);
       }
-      $this->logSiape("IntegracaoService: Alterando email duplicado para email fake", ['cpf' => $cpf, 'email' => $email, 'usuario' => $usuario->toJson()], Tipo::WARNING);
+      SiapeLog::info("IntegracaoService: Alterando email duplicado para email fake", ['cpf' => $cpf, 'email' => $email, 'usuario' => $usuario->toJson()]);
       $usuario->update(['email' => $novoemail]);
     }
   }
@@ -995,7 +1024,7 @@ class IntegracaoService extends ServiceBase
     }
   }
 
-    public function atualizaLogs($user_id, string $table_name, string $row_id, string $type, array $delta)
+  public function atualizaLogs($user_id, string $table_name, string $row_id, string $type, array $delta)
   {
     /*
       $change = DB::connection('log');
@@ -1011,12 +1040,6 @@ class IntegracaoService extends ServiceBase
         ]);*/
   }
 
-  public function imprimeNoTerminal($str)
-  {
-    passthru("echo " . $str);
-    ob_flush();
-  }
-
   /**
    * SHOW RESPONSÁVEIS
    * Devolve um array de objetos do tipo {'key' => 'value'}, onde 'value' é o nome do usuário que executou alguma vez
@@ -1025,17 +1048,15 @@ class IntegracaoService extends ServiceBase
    */
   public function showResponsaveis()
   {
-    Log::alert("ok");
-    $a = array_map(fn ($u) => ['key' => $u['id'], 'value' => $u['nome']], Usuario::select(['id', 'nome'])->has('integracoes')->get()->toArray());
+    $a = array_map(fn($u) => ['key' => $u['id'], 'value' => $u['nome']], Usuario::select(['id', 'nome'])->has('integracoes')->get()->toArray());
     $b = array_merge([['key' => "null", 'value' => 'Sistema']], $a);
     usort($b, function ($a, $b) {
       return strnatcmp($a['value'], $b['value']);
     });
-    Log::alert("okok", $b);
     return $b;
   }
 
-  public function buscaProcessamentosPendentes(): array    
+  public function buscaProcessamentosPendentes(): array
   {
     $siapeDadosUORG = SiapeDadosUORG::where('processado', 0)->count() > 1;
     $siapeDadosPessoais = SiapeConsultaDadosPessoais::where('processado', 0)->count() > 1;
@@ -1052,21 +1073,20 @@ class IntegracaoService extends ServiceBase
   {
     $siapeUnidadeRaiz = IntegracaoUnidade::where('pai_servo', self::CODIGO_SIAPE_UNIDADE_RAIZ_PELO_PAI)->first();
     if (is_null($siapeUnidadeRaiz)) {
-      Log::channel('siape')->info("Unidade raiz nao encontrada na tabela de integracao_unidades.");
+      SiapeLog::info("Unidade raiz nao encontrada na tabela de integracao_unidades.");
       return;
     }
 
     $unidadeRaiz = Unidade::where('sigla', $siapeUnidadeRaiz->siglauorg)->first();
     if (is_null($unidadeRaiz)) {
-      Log::channel('siape')->info(sprintf("Unidade raiz %s nao encontrada na tabela de unidades.", $siapeUnidadeRaiz->siglauorg));
+      SiapeLog::info(sprintf("Unidade raiz %s nao encontrada na tabela de unidades.", $siapeUnidadeRaiz->siglauorg));
       return;
     }
 
     if ($unidadeRaiz->codigo != $siapeUnidadeRaiz->codigo_siape) {
       $unidadeRaiz->codigo = $siapeUnidadeRaiz->codigo_siape;
-      Log::channel('siape')->info(sprintf("Corrigindo unidade raiz %s", $siapeUnidadeRaiz->siglauorg));
+      SiapeLog::info(sprintf("Corrigindo unidade raiz %s", $siapeUnidadeRaiz->siglauorg));
       $unidadeRaiz->save();
     }
   }
-
 }

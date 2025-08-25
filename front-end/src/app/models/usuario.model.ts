@@ -146,11 +146,14 @@ export class Usuario extends Base implements HasNotificacao {
     public url_foto: string | null = null; /* URL da foto do usuário (temporário) */
     public situacao_funcional: UsuarioSituacaoFuncional = "ATIVO_PERMANENTE";
     public texto_complementar_plano: string | null = ""; // Mensagem adicional para o plano de trabalho
-    public nome_jornada: string | null = null; // Nome da jornada de trabalho
-    public cod_jornada: number | null = null; // Código da jornada de trabalho
 
     //public perfil_id: number = 0; /* ID do perfil - Setar o primeiro do list*/
     public perfil_id: string = ""; /* ID do perfil - Setar o primeiro do list*/
+
+    public tipo_pedagio: number | null = null; /* Tipo de Pedágio */
+    public data_inicial_pedagio: Date | null = null; /* Data Inicial do Pedágio */
+    public data_final_pedagio: Date | null = null; /* Data Final do Pedágio */
+    public pedagio: boolean = false;
 
     public constructor(data?: any) { super(); this.initialization(data); }
 }

@@ -44,9 +44,11 @@ class SincronizarSiapeJob implements ShouldQueue, ContratoJobSchedule
             $entidades = Entidade::all();
             $inputs = [
                 'unidades' => true,
-                'servidores' => false,
-                'gestores' => false,
+                'servidores' => true,
+                'gestores' => true,
             ];
+            ob_start(); // Inicia o buffer de saída.
+            ob_implicit_flush(true); // Libera a chamada explícita para o output buffer.
             foreach ($entidades as $entidade) {
                 $inputs['entidade'] = $entidade->id;
                 Log::alert("Job SincronizarPetrvs: " . json_encode($inputs));

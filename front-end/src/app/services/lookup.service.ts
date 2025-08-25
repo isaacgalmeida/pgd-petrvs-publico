@@ -615,11 +615,18 @@ export class LookupService implements IIndexable {
   ];
 
   public TIPO_LOG_CHANGE: LookupItem[] = [
-    { key: "ADD", value: "ADD" },
-    { key: "EDIT", value: "EDIT" },
-    { key: "SOFT_DELETE", value: "SOFT_DELETE" },
-    { key: "DELETE", value: "DELETE" },
+    { key: "ADD", value: "Adicionar" },
+    { key: "EDIT", value: "Alterar" },
+    { key: "SOFT_DELETE", value: "Excluir" },
+    { key: "DELETE", value: "Excluir Permanente" },
   ];
+
+  public TIPO_LOG_AUDIT: LookupItem[] = [
+    { key: "created", value: "Criado" },
+    { key: "updated", value: "Editado" },
+    { key: "delete", value: "Excluído" },
+  ];
+
 
   public TIPO_LOG_ERROR: LookupItem[] = [
     { key: "ERROR", value: "ERROR" },
@@ -918,6 +925,64 @@ export class LookupService implements IIndexable {
     { key: "trabalho", value: "Plano de Trabalho" }
   ];
 
+  public AGENDAMENTO_PERIODICIDADES: LookupItem[] = [
+    { key: 'cada', value: "A cada" },
+    { key: 'dia', value: "No dia" },
+    { key: 'todos', value: "Todos os dias" },
+    { key: 'domingo', value: "Todo domingo" },
+    { key: 'segunda', value: "Toda segunda" },
+    { key: 'terça', value: "Toda terça" },
+    { key: 'quarta', value: "Toda quarta" },
+    { key: 'quinta', value: "Toda quinta" },
+    { key: 'sexta', value: "Toda sexta" },
+    { key: 'sabado', value: "Toda sábado" },
+    { key: 'custom', value: "Personalizado" }
+  ];
+
+  public AGENDAMENTO_INTERVALO_TIPOS: LookupItem[] = [
+    { key: 'minuto', value: "minuto(s)" },
+    { key: 'hora', value: "hora(s)" }
+  ];
+
+  public INDISPONIBILIDADE_TIPOS: LookupItem[] = [
+    {
+			key: "1",
+			value:
+				"Art 10, §2º, INC SEGES/SPGRT nº 24/2024- Primeiro ano do Estágio Probatório.",
+		},
+		{
+			key: "2",
+			value:
+				"Art 10, §3º, INC SEGES/SPGRT nº 24/2024- Movimentação entre órgãos há menos de 6 (seis) meses.",
+		},
+  ];
+
+  public RELATORIO_PT_SITUACOES_EXECUCAO: LookupItem[] = [
+    { key: 'Aguardando', value: "Aguardando" },
+    { key: 'Atrasado', value: "Atrasado" },
+    { key: 'Registrado no período', value: "Registrado no período" },
+    { key: 'Registrado com atraso', value: "Registrado com atraso" },
+  ];
+
+  public RELATORIO_PT_SITUACOES_AVALIACAO: LookupItem[] = [
+    { key: 'Aguardando', value: "Aguardando" },
+    { key: 'Atrasado', value: "Atrasado" },
+    { key: 'Registrado no período', value: "Registrado no período" },
+    { key: 'Registrado com atraso', value: "Registrado com atraso" },
+  ];
+
+  public RELATORIO_PE_SITUACOES_AVALIACAO: LookupItem[] = [
+    { key: 'Aguardando', value: "Aguardando" },
+    { key: 'Atrasado', value: "Atrasado" },
+    { key: 'Registrado no período', value: "Registrado no período" },
+    { key: 'Registrado com atraso', value: "Registrado com atraso" },
+  ];
+
+  public RELATORIO_UNIDADE_TIPOS: LookupItem[] = [
+    { key: 'Instituidora', value: "Instituidora" },
+    { key: 'Executora', value: "Executora" }
+  ];
+
   public getLookup(itens: LookupItem[], key: any) {
     return itens.find(x => x.key == key);
   }
@@ -955,5 +1020,18 @@ export class LookupService implements IIndexable {
 
   public ordenarLookupItem(array: LookupItem[]): LookupItem[] {
     return array.sort((a, b) => (a.value < b.value) ? -1 : 1);
+  }
+
+  // use para mapear uma coleção de objetos para LookupItem[]
+  // Exemplo: this.lookupService.map(data, 'id', 'name');
+  public map<T>(
+    data: T[],
+    keyField: keyof T,
+    valueField: keyof T
+  ): LookupItem[] {
+    return data.map(item => ({
+      key: String(item[keyField]),
+      value: String(item[valueField])
+    }));
   }
 }

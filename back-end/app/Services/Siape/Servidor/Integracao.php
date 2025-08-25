@@ -8,6 +8,7 @@ use App\Repository\IntegracaoServidorRepository;
 use App\Services\LogTrait;
 use App\Services\Siape\Contrato\InterfaceIntegracao;
 use App\Services\Siape\Imprimir;
+use App\Services\Siape\Unidade\Atribuicao;
 use App\Services\Tipo;
 use App\Services\UtilService;
 use Illuminate\Support\Facades\Log;
@@ -58,11 +59,16 @@ class Integracao implements InterfaceIntegracao
         }
 
         if ($quantidadeDeEmaisVazios) {
-            array_push($this->result['servidores']['Observações'], 'Total de servidores com email funcional vazio no SIAPE: ' . $quantidadeDeEmaisVazios . ' (apenas ATIVOS).');
-            array_push($this->result['servidores']['Observações'], 'Lista de servidores com email funcional vazio no SIAPE: ' . implode(', ', $this->cpfsComEmaisFuncionaisVazios) . '.');
+            array_push($this->result['servidores']['Observações'],
+                'Total de servidores com email funcional vazio no SIAPE: ' .
+                    $quantidadeDeEmaisVazios . ' (apenas ATIVOS).');
+            array_push($this->result['servidores']['Observações'],
+                'Lista de servidores com email funcional vazio no SIAPE: ' .
+                    implode(', ', $this->cpfsComEmaisFuncionaisVazios) . '.');
         }
 
-        array_push($this->result['servidores']['Observações'], 'Total de servidores importados do SIAPE: ' . $quantidadeTotal . ' (apenas ATIVOS).');
+        array_push($this->result['servidores']['Observações'],
+            'Total de servidores importados do SIAPE: ' . $quantidadeTotal . ' (apenas ATIVOS).');
     }
 
 
@@ -71,7 +77,10 @@ class Integracao implements InterfaceIntegracao
         $registroDobanco = $this->repository->getUmPeloCPF($entidade->cpf);
 
         if (!in_array($entidade->cpf, $this->cpfsIntegracaoAlterados) && $registroDobanco == null) {
-            $this->logSiape('Salvando Novo Servidor na tabela integracao_servidores: ' , ['integracao_servidores'=>$entidade->toJson()], Tipo::INFO);
+            /*$this->logSiape('Salvando Novo Servidor na tabela integracao_servidores: ' , [
+                'integracao_servidores'=>$entidade->toJson()
+            ], Tipo::INFO);**/
+
             $registro = $this->repository->save($entidade);
             array_push($this->cpfsIntegracaoAlterados, $entidade->cpf);
 
@@ -82,14 +91,19 @@ class Integracao implements InterfaceIntegracao
         }
 
         if ($registroDobanco && !in_array($entidade->cpf, $this->cpfsIntegracaoAlterados)) {
-            $this->logSiape('Atualizando Servidor na tabela integracao_servidores: ' , ['integracao_servidores_antigo'=>$registroDobanco->toJson(),'integracao_servidores_novo'=>$entidade->toJson()], Tipo::INFO);
+            
+            /*$this->logSiape('Atualizando Servidor na tabela integracao_servidores: ' , [
+                'integracao_servidores_antigo'=>$registroDobanco->toJson(),
+                'integracao_servidores_novo'=>$entidade->toJson()
+            ], Tipo::INFO);*/
+
             $dadosAtualizados = $entidade->only([
                 'cpf_ativo', 'data_modificacao', 'nome', 'emailfuncional', 'sexo',
                 'municipio', 'uf', 'data_nascimento', 'telefone', 'vinculo_ativo', 
                 'codigo_cargo', 'coduorgexercicio', 'coduorglotacao',
                 'codigo_servo_exercicio', 'nomeguerra', 'codigo_situacao_funcional', 
                 'situacao_funcional', 'codupag', 'dataexercicionoorgao', 'funcoes', 
-                'cpf_chefia_imediata', 'email_chefia_imediata', 'nome_jornada', 'cod_jornada'
+                'cpf_chefia_imediata', 'email_chefia_imediata'
             ]);
             $registro =  $this->repository->update($entidade->cpf, $dadosAtualizados);
             array_push($this->cpfsIntegracaoAlterados, $entidade->cpf);
@@ -108,7 +122,10 @@ class Integracao implements InterfaceIntegracao
     private function verificaEmailsFuncionaisVazios(entidade $entidade): void
     {
         str_contains($entidade->emailfuncional, '@petrvs.gov.br') ?
-            array_push($this->cpfsComEmaisFuncionaisVazios, "CPF: " . $entidade->cpf . " (" . $entidade->situacao_funcional . ") - " . $entidade->emailfuncional) : true;
+            array_push($this->cpfsComEmaisFuncionaisVazios,
+                "CPF: " . $entidade->cpf .
+                    " (" . $entidade->situacao_funcional . ") - " .
+                    $entidade->emailfuncional) : true;
     }
 
     private function montaEntidadeServidor(array $servidor): ?entidade

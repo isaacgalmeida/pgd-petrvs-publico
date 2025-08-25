@@ -29,14 +29,14 @@ import {ColumnsComponent} from "./columns/columns.component";
 import {FilterComponent} from "./filter/filter.component";
 import {GridColumn} from "./grid-column";
 import {PaginationComponent} from "./pagination/pagination.component";
-import {ReportComponent} from "./report/report.component";
 import {SidePanelComponent} from "./side-panel/side-panel.component";
 import {LookupItem} from "src/app/services/lookup.service";
 import {TemplateDaoService} from "src/app/dao/template-dao.service";
 import {DocumentoService} from "src/app/modules/uteis/documentos/documento.service";
+import { HeaderGroupsComponent } from "./header-groups/header-groups.component";
 
 export type GroupBy = {field: string; label: string; value?: any};
-
+declare var bootstrap: any;
 export class GridGroupSeparator {
 	constructor(public group: GroupBy[]) {}
 	public metadata: any = undefined;
@@ -64,11 +64,11 @@ export class GridComponent extends ComponentBase implements OnInit {
 		return this.isNoMargin ? "p-0 m-0" : "";
 	}
 	@ContentChild(ColumnsComponent) columnsRef?: ColumnsComponent;
-	@ContentChild(ReportComponent) reportRef?: ReportComponent;
 	@ContentChild(FilterComponent) filterRef?: FilterComponent;
 	@ContentChild(SidePanelComponent) sidePanel?: SidePanelComponent;
 	@ContentChild(ToolbarComponent) toolbarRef?: ToolbarComponent;
 	@ContentChild(PaginationComponent) paginationRef?: PaginationComponent;
+	@ContentChild(HeaderGroupsComponent) headerGroups?: HeaderGroupsComponent;
 	@ViewChild(FormGroupDirective) formDirective?: FormGroupDirective;
 	@Output() select = new EventEmitter<Base | IIndexable | null>();
 	@Input() dao?: DaoBaseService<Base>;
@@ -97,13 +97,14 @@ export class GridComponent extends ComponentBase implements OnInit {
 	@Input() noHeader?: string;
 	@Input() noMargin?: string;
 	@Input() editable?: string;
-	@Input() hasReport: boolean = true;
+	@Input() hasReport: boolean = false;
 	@Input() scrollable: boolean = false;
 	@Input() controlName: string | null = null;
 	@Input() control?: AbstractControl = undefined;
 	@Input() expanded?: string;
 	@Input() noToggleable?: string;
 	@Input() minHeight: number = 350;
+	@Input() maxHeight: number|string = "auto";
 	@Input() multiselect?: string;
 	@Input() multiselectEnabled?: string;
 	@Input() multiselectAllFields: string[] = [];
@@ -212,6 +213,8 @@ export class GridComponent extends ComponentBase implements OnInit {
 		return this._loading;
 	}
 
+	@Input() className: string|null = null;
+
 	/* Propriedades private e métodos get e set */
 	private _query?: QueryContext<Base>;
 	private _list?: Observable<any[]>;
@@ -283,12 +286,6 @@ export class GridComponent extends ComponentBase implements OnInit {
 		label: this.labelAdd,
 		onClick: this.addToolbarButtonClick,
 	};
-	public BUTTON_REPORT: ToolbarButton = {
-		icon: "bi-file-earmark-spreadsheet",
-		color: "btn-outline-info",
-		label: "Exportar",
-		onClick: () => this.report(),
-	};
 	public BUTTON_EDIT: ToolbarButton = {
 		label: "Alterar",
 		icon: "bi bi-pencil-square",
@@ -328,23 +325,7 @@ export class GridComponent extends ComponentBase implements OnInit {
 			},
 		],
 	};
-	public BUTTON_REPORTS: ToolbarButton = {
-		label: "Relatórios",
-		icon: "bi bi-file-earmark-ruled",
-		toggle: true,
-		pressed: false,
-		color: "btn-outline-info",
-		onClick: this.onMultiselectClick.bind(this),
-		items: [
-			{
-				label: "Exportar para Excel",
-				icon: "bi bi-file-spreadsheet",
-				hint: "Excel",
-				color: "btn-outline-danger",
-				onClick: this.report.bind(this),
-			},
-		],
-	};
+	
 	public panelButtons: ToolbarButton[] = [
 		{
 			id: "concluir_valid",
@@ -385,22 +366,7 @@ export class GridComponent extends ComponentBase implements OnInit {
 
 	ngOnInit(): void {
 		this.BUTTON_ADD.label = this.labelAdd;
-		if (this.relatorios) {
-			this.relatorios.forEach((relatorio) => {
-				const existingItem = this.BUTTON_REPORTS.items?.find(
-					(item) => item.id === relatorio.key
-				);
-				if (!existingItem) {
-					this.BUTTON_REPORTS.items?.push({
-						label: relatorio.value,
-						icon: "bi bi-file-pdf",
-						hint: "Visualizar",
-						id: relatorio.key,
-						onClick: () => this.buildReport(relatorio.key),
-					});
-				}
-			});
-		}
+		
 	}
 
 	public getId(relativeId?: string) {
@@ -413,9 +379,9 @@ export class GridComponent extends ComponentBase implements OnInit {
 		/* Carrega as configurações feitas via components (tags) */
 		this.loadColumns();
 		this.loadFilter();
-		this.loadReport();
 		this.loadToolbar();
 		this.loadPagination();
+
 		/* Habilita muiltiselect caso multiselectEnabled esteja presente */
 		if (this.isMultiselectEnabled) this.enableMultiselect(true);
 	}
@@ -435,7 +401,13 @@ export class GridComponent extends ComponentBase implements OnInit {
 
 	public queryInit() {
 		this.query = this.dao?.query(this.queryOptions, {
-			after: () => this.cdRef.detectChanges(),
+			after: () => {
+				this.cdRef.detectChanges();
+					setTimeout(() => {
+						const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+						const tooltipList = Array.from(tooltipTriggerList).map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
+					}, 300);
+			},
 		});
 		this.cdRef.detectChanges();
 	}
@@ -552,39 +524,7 @@ export class GridComponent extends ComponentBase implements OnInit {
 		}
 	}
 
-	public report() {
-		if (this.reportRef) {
-			(async () => {
-				await this.reportRef!.reportExcel();
-			})();
-		}
-	}
-	public buildReport(codigo: string, query: QueryOptions = this.queryOptions) {
-		let params = {
-			where: DaoBaseService.prepareWhere(query?.where || []),
-			orderBy: query?.orderBy || [],
-			with: query?.join || [],
-		};
-		this.showPreview(codigo, params);
-	}
-
-	public buildRowReport(codigo: string, row: any) {
-		let params = {
-			id: row.id,
-			with: row?.join || [],
-		};
-		this.showPreview(codigo, params);
-	}
-
-	showPreview(codigo: string, params: any) {
-		if (this.go.gb.auth.entidade?.id) {
-			this.templateDao
-				.getReport(this.go.gb.auth.entidade?.id, codigo, params)
-				.then((documento) => {
-					this.documentoService.preview(documento);
-				});
-		}
-	}
+	
 
 	public expand(id: string) {
 		this.expandedIds[id] = true;
@@ -734,12 +674,7 @@ export class GridComponent extends ComponentBase implements OnInit {
 		}
 	}
 
-	public loadReport() {
-		if (this.reportRef) {
-			this.reportRef.grid = this;
-			if (this.hasReport) this.toolbarButtons.push(this.BUTTON_REPORTS);
-		}
-	}
+
 
 	public loadToolbar() {
 		if (this.toolbarRef && !this.isDisabled) {

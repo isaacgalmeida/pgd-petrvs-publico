@@ -9,9 +9,16 @@
     [hasAdd]="auth.hasPermissionTo('MOD_PTR_INCL')" [hasEdit]="false" [dynamicMultiselectMenu]="dynamicMultiselectMenu.bind(this)" [multiselectAllFields]="multiselectAllFields">
     <toolbar *ngIf="!selectable">
         <!-- (RN_PTR_I) Quando a Unidade Executora não for a unidade de lotação do servidor, seu gestor imediato e seus substitutos devem ter acesso ao seu Plano de Trabalho (e à sua execução); -->
+        <input-switch [size]="1"
+                      label="Meus"
+                      (change)="disableSub()"
+                      labelPosition="left"
+                      [control]="filter!.controls.meus_planos"
+        >
+        </input-switch>
         <input-switch *ngIf="temAtribuicaoChefia" [size]="4" labelPosition="left" label="Lotados em minha unidade" controlName="lotados_minha_unidade" [control]="filter!.controls.lotados_minha_unidade" (change)="onLotadosMinhaUnidadeChange($event)"></input-switch>
         <!--<input-switch [size]="4" labelPosition="left" label="Agrupar por unidade" controlName="agrupar" [control]="filter!.controls.agrupar" (change)="onAgruparChange($event)"></input-switch>-->
-        <input-switch [size]="4" labelPosition="left" label="Unidades Subordinadas" controlName="subordinadas" [control]="filter!.controls.subordinadas" ></input-switch>
+        <input-switch [size]="4" labelPosition="left" label="Unidades Subordinadas" controlName="subordinadas" [control]="filter!.controls.subordinadas" (change)="disableMeus()" ></input-switch>
     </toolbar>
     <filter [deleted]="this.auth.hasPermissionTo('MOD_AUDIT_DEL')" [form]="filter" [where]="filterWhere" [submit]="filterSubmit.bind(this)" [clear]="filterClear.bind(this)" [collapseChange]="filterCollapseChange.bind(this)" [collapsed]="!selectable && filterCollapsed">
         <div class="row">
@@ -33,7 +40,7 @@
                 <span *ngIf="row.entregas?.length" class="badge rounded-pill bg-light text-dark"><i class="bi bi-list-check"></i> {{row.entregas?.length}}</span>
             </ng-template>
             <ng-template let-row="row" #columnExpandedEntregas>
-                <plano-trabalho-list-entrega [entity]="row" [planoTrabalhoEditavel]="row._metadata.editavel || false" (atualizaPlanoTrabalhoEvent)="(grid?.query || query)?.refreshId($event)"></plano-trabalho-list-entrega>
+                <plano-trabalho-list-entrega [entity]="row" [planoTrabalhoEditavel]="row._metadata?.editavel || false" (atualizaPlanoTrabalhoEvent)="(grid?.query || query)?.refreshId($event)"></plano-trabalho-list-entrega>
             </ng-template>
         </column>
         <column [titleTemplate]="titleNumero" [template]="columnNumero" [minWidth]="50">
@@ -87,7 +94,7 @@
         </column>
         <column title="Status" [template]="columnStatus">
             <ng-template let-row="row" #columnStatus>
-                <badge [color]="lookup.getColor(lookup.PLANO_TRABALHO_STATUS, row.status)" [icon]="lookup.getIcon(lookup.PLANO_TRABALHO_STATUS, row.status)" [label]="lookup.getValue(lookup.PLANO_TRABALHO_STATUS, row.status)"></badge><br>
+                <badge [color]="lookup.getColor(lookup.PLANO_TRABALHO_STATUS, row.status)" [icon]="lookup.getIcon(lookup.PLANO_TRABALHO_STATUS, row.status)" [label]="lookup.getValue(lookup.PLANO_TRABALHO_STATUS, row.status)" [hint]="row.status ==  'AGUARDANDO_ASSINATURA' ? contadorAssinaturas(row) : undefined"></badge><br>
                 <badge *ngIf="row.data_arquivamento" color="warning" icon="bi bi-inboxes" label="Arquivado"></badge>
                 <badge *ngIf="row.deleted_at" color="danger" icon="bi bi-trash3" label="Excluído"></badge>
             </ng-template>

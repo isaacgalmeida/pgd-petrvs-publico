@@ -42,6 +42,33 @@ class CadeiaValorProcesso extends ModelBase
   }  //ok
   public function processoPai()
   {
-    return $this->belongsTo(CadeiaValorProcesso::class);
+      return $this->belongsTo(CadeiaValorProcesso::class, 'processo_pai_id');
   }    //nullable
+    public function getSequenciaCompleta()
+    {
+        $sequencia = [];
+        $processo = $this;
+
+        while ($processo) {
+            array_unshift($sequencia, $processo->sequencia); // insere no início
+            $processo = $processo->processoPai;
+        }
+
+        return implode('.', $sequencia);
+    }
+    public function getAuditRelations(): array
+    {
+        return [
+            [
+                'model' => \App\Models\PlanoEntregaEntregaProcesso::class,
+                'foreign_key' => 'cadeia_processo_id',
+            ],
+            [
+                'model' => \App\Models\CadeiaValorProcesso::class,
+                'foreign_key' => 'processo_pai_id',
+            ],
+        ];
+    }
+
+
 }

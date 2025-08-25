@@ -1,74 +1,41 @@
 <?php
 
-use App\Http\Controllers\CadeiaValorController;
-use App\Http\Controllers\CatalogoController;
-use App\Http\Controllers\SolucaoController;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\LoginController;
-use App\Http\Controllers\IntegracaoController;
-use App\Http\Controllers\UsuarioController;
-use App\Http\Controllers\PerfilController;
-use App\Http\Controllers\ControllerBase;
-use App\Http\Controllers\EntidadeController;
-use App\Http\Controllers\UnidadeController;
-use App\Http\Controllers\CidadeController;
-use App\Http\Controllers\ChangeController;
-use App\Http\Controllers\EntregaController;
-use App\Http\Controllers\EixoTematicoController;
-use App\Http\Controllers\ErrorController;
-use App\Http\Controllers\EnvioController;
-use App\Http\Controllers\EnvioItemController;
-use App\Http\Controllers\ProgramaController;
-use App\Http\Controllers\ProgramaParticipanteController;
-use App\Http\Controllers\PlanejamentoController;
-use App\Http\Controllers\PlanejamentoObjetivoController;
-use App\Http\Controllers\PlanoTrabalhoController;
-use App\Http\Controllers\PlanoEntregaController;
-use App\Http\Controllers\PlanoEntregaEntregaController;
-use App\Http\Controllers\PetrvsController;
-use App\Http\Controllers\DocumentoController;
-use App\Http\Controllers\TipoAvaliacaoController;
-use App\Http\Controllers\TipoDocumentoController;
-use App\Http\Controllers\TipoProcessoController;
-use App\Http\Controllers\TipoJustificativaController;
-use App\Http\Controllers\TipoAtividadeController;
-use App\Http\Controllers\TipoMotivoAfastamentoController;
-use App\Http\Controllers\TipoModalidadeController;
-use App\Http\Controllers\TipoCapacidadeController;
-use App\Http\Controllers\CapacidadeController;
-use App\Http\Controllers\FeriadoController;
 use App\Http\Controllers\AfastamentoController;
-use App\Http\Controllers\CadeiaValorProcessoController;
-use App\Http\Controllers\AtividadeController;
-use App\Http\Controllers\CalendarioController;
-use App\Http\Controllers\TipoTarefaController;
-use App\Http\Controllers\MaterialServicoController;
-use App\Http\Controllers\ProjetoController;
-use App\Http\Controllers\RotinaDiariaController;
-use App\Http\Controllers\TemplateController;
+use App\Http\Controllers\AreaAtividadeExternaController;
 use App\Http\Controllers\AreaConhecimentoController;
-use App\Http\Controllers\CursoController;
-use App\Http\Controllers\TipoCursoController;
+use App\Http\Controllers\AreaTematicaController;
+use App\Http\Controllers\AtividadeController;
+use App\Http\Controllers\AtividadeTarefaController;
+use App\Http\Controllers\AvaliacaoController;
+use App\Http\Controllers\BatchController;
+use App\Http\Controllers\CadeiaValorController;
+use App\Http\Controllers\CadeiaValorProcessoController;
+use App\Http\Controllers\CalendarioController;
+use App\Http\Controllers\CapacidadeController;
+use App\Http\Controllers\CapacidadeTecnicaController;
+use App\Http\Controllers\CargoController;
+use App\Http\Controllers\CatalogoController;
+use App\Http\Controllers\CentroTreinamentoController;
+use App\Http\Controllers\ChangeController;
+use App\Http\Controllers\CidadeController;
+use App\Http\Controllers\ClienteController;
+use App\Http\Controllers\ComparecimentoController;
+use App\Http\Controllers\ControllerBase;
 use App\Http\Controllers\CurriculumController;
 use App\Http\Controllers\CurriculumGraduacaoController;
-use App\Http\Controllers\CentroTreinamentoController;
+use App\Http\Controllers\CurriculumProfissionalController;
+use App\Http\Controllers\CursoController;
+use App\Http\Controllers\DisciplinaController;
+use App\Http\Controllers\DocumentoController;
+use App\Http\Controllers\EixoTematicoController;
+use App\Http\Controllers\EntidadeController;
+use App\Http\Controllers\EntregaController;
+use App\Http\Controllers\EnvioController;
+use App\Http\Controllers\EnvioItemController;
+use App\Http\Controllers\ErrorController;
+use App\Http\Controllers\FeriadoController;
 use App\Http\Controllers\FuncaoController;
 use App\Http\Controllers\GrupoEspecializadoController;
-use App\Http\Controllers\CargoController;
-use App\Http\Controllers\NotificacaoController;
-use App\Http\Controllers\PlanoTrabalhoEntregaController;
-use App\Http\Controllers\PlanoTrabalhoConsolidacaoController;
-use App\Http\Controllers\UnidadeIntegranteController;
-use App\Http\Controllers\UnidadeIntegranteAtribuicaoController;
-use App\Http\Controllers\DisciplinaController;
-use App\Http\Controllers\CurriculumProfissionalController;
-use App\Http\Controllers\AreaAtividadeExternaController;
-use App\Http\Controllers\AreaTematicaController;
-use App\Http\Controllers\AtividadeTarefaController;
-use App\Http\Controllers\CapacidadeTecnicaController;
-use App\Http\Controllers\QuestionarioController;
-use App\Http\Controllers\AvaliacaoController;
 use App\Http\Controllers\HistoricoAtividadeExternaController;
 use App\Http\Controllers\HistoricoAtividadeInternaController;
 use App\Http\Controllers\HistoricoCursoExternoController;
@@ -77,21 +44,67 @@ use App\Http\Controllers\HistoricoDocenciaExternaController;
 use App\Http\Controllers\HistoricoDocenciaInternaController;
 use App\Http\Controllers\HistoricoFuncaoController;
 use App\Http\Controllers\HistoricoLotacaoController;
-use App\Http\Controllers\ComparecimentoController;
-use App\Http\Controllers\BatchController;
-use App\Http\Controllers\ClienteController;
+use App\Http\Controllers\ImpersonationController;
+use App\Http\Controllers\IntegracaoController;
+use App\Http\Controllers\LoginController;
+use App\Http\Controllers\MaterialServicoController;
+use App\Http\Controllers\NotificacaoController;
 use App\Http\Controllers\OcorrenciaController;
-use App\Http\Controllers\ReacaoController;
+use App\Http\Controllers\PerfilController;
+use App\Http\Controllers\PetrvsController;
+use App\Http\Controllers\PlanejamentoController;
+use App\Http\Controllers\PlanejamentoObjetivoController;
+use App\Http\Controllers\PlanoEntregaController;
+use App\Http\Controllers\PlanoEntregaEntregaController;
 use App\Http\Controllers\PlanoEntregaEntregaProgressoController;
-use App\Http\Controllers\QuestionarioPreenchimentoController;
+use App\Http\Controllers\PlanoTrabalhoConsolidacaoController;
+use App\Http\Controllers\PlanoTrabalhoController;
+use App\Http\Controllers\PlanoTrabalhoEntregaController;
+use App\Http\Controllers\ProdutoController;
+use App\Http\Controllers\ProgramaController;
+use App\Http\Controllers\ProgramaParticipanteController;
+use App\Http\Controllers\ProjetoController;
+use App\Http\Controllers\QuestionarioController;
 use App\Http\Controllers\QuestionarioPerguntaController;
 use App\Http\Controllers\QuestionarioPerguntaRespostaController;
-use App\Http\Controllers\ProdutoController;
-use App\Http\Controllers\TipoClienteController;
-use FontLib\Table\Type\post;
-use App\Http\Controllers\JobAgendadoController;
+use App\Http\Controllers\QuestionarioPreenchimentoController;
+use App\Http\Controllers\ReacaoController;
 use App\Http\Controllers\RelatoController;
+use App\Http\Controllers\RelatorioAgenteController;
+use App\Http\Controllers\RelatorioController;
+use App\Http\Controllers\RelatorioPlanoEntregaController;
+use App\Http\Controllers\RelatorioUnidadeController;
+use App\Http\Controllers\RotinaDiariaController;
+use App\Http\Controllers\SiapeIndividualController;
+use App\Http\Controllers\SolucaoController;
 use App\Http\Controllers\SolucaoUnidadeController;
+use App\Http\Controllers\TemplateController;
+use App\Http\Controllers\TipoAtividadeController;
+use App\Http\Controllers\TipoAvaliacaoController;
+use App\Http\Controllers\TipoAvaliacaoNotaController;
+use App\Http\Controllers\TipoCapacidadeController;
+use App\Http\Controllers\TipoClienteController;
+use App\Http\Controllers\TipoCursoController;
+use App\Http\Controllers\TipoDocumentoController;
+
+use App\Http\Controllers\TipoJustificativaController;
+use App\Http\Controllers\TipoModalidadeController;
+use App\Http\Controllers\TipoMotivoAfastamentoController;
+use App\Http\Controllers\TipoProcessoController;
+use App\Http\Controllers\TipoTarefaController;
+use App\Http\Controllers\UnidadeController;
+use App\Http\Controllers\UnidadeIntegranteAtribuicaoController;
+use App\Http\Controllers\UnidadeIntegranteController;
+use App\Http\Controllers\UsuarioController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+
+
+
+
+
+
+
 
 /*
 |--------------------------------------------------------------------------
@@ -145,6 +158,7 @@ Route::middleware('auth:sanctum')->prefix('Change')->group(function () {
   Route::post('query', [ChangeController::class, 'query']);
   Route::post('get-by-id', [ChangeController::class, 'getById']);
   Route::post('showResponsaveis', [ChangeController::class, 'showResponsaveis']);
+  Route::post('list-models', [ChangeController::class, 'loadModels']);
 });
 Route::middleware('auth:sanctum')->prefix('Error')->group(function () {
   Route::post('query', [ErrorController::class, 'query']);
@@ -237,6 +251,9 @@ Route::middleware(['auth:sanctum'])->prefix('TipoJustificativa')->group(function
 });
 Route::middleware(['auth:sanctum'])->prefix('TipoAvaliacao')->group(function () {
   defaultRoutes(TipoAvaliacaoController::class);
+});
+Route::middleware(['auth:sanctum'])->prefix('TipoAvaliacaoNota')->group(function () {
+  Route::post('query', [TipoAvaliacaoNotaController::class, 'query']);
 });
 Route::middleware(['auth:sanctum'])->prefix('TipoModalidade')->group(function () {
   defaultRoutes(TipoModalidadeController::class);
@@ -333,6 +350,7 @@ Route::middleware(['auth:sanctum'])->prefix('PlanoEntrega')->group(function () {
 Route::middleware(['auth:sanctum'])->prefix('PlanoEntregaEntrega')->group(function () {
   defaultRoutes(PlanoEntregaEntregaController::class);
   Route::post('hierarquia', [PlanoEntregaEntregaController::class, 'hierarquia']);
+  Route::post('possui-vinculos-excluidos', [PlanoEntregaEntregaController::class, 'possuiVinculosExcluidos']);
 });
 
 Route::middleware(['auth:sanctum'])->prefix('Projeto')->group(function () {
@@ -342,6 +360,8 @@ Route::middleware(['auth:sanctum'])->prefix('Projeto')->group(function () {
 /* Modulos: Configurações */
 Route::middleware(['auth:sanctum'])->prefix('Usuario')->group(function () {
   defaultRoutes(UsuarioController::class);
+  Route::post('atualiza-pedagio', [UsuarioController::class, 'atualizaPedagio']);
+  Route::post('remove-pedagio', [UsuarioController::class, 'removerPedagio']);
 });
 Route::middleware(['auth:sanctum'])->prefix('Perfil')->group(function () {
   defaultRoutes(PerfilController::class);
@@ -359,6 +379,7 @@ Route::middleware(['auth:sanctum'])->prefix('Unidade')->group(function () {
   Route::post('lotados', [UnidadeController::class, 'lotados']);
   Route::post('hierarquia', [UnidadeController::class, 'hierarquia']);
   Route::post('filhas', [UnidadeController::class, 'filhas']);
+  Route::post('subordinadas', [UnidadeController::class, 'subordinadas']);
   Route::post('linhaAscendente', [UnidadeController::class, 'linhaAscendente']);
   Route::post('lookup-todas-unidades', [UnidadeController::class, 'lookupTodasUnidades']);
   Route::post('obter-instituidora', [UnidadeController::class, 'obterInstitudora']);
@@ -491,9 +512,58 @@ Route::middleware(['auth:sanctum'])->prefix('Relato')->group(function () {
   Route::post('store', [RelatoController::class, 'store']);
   Route::get('confirmar/{email}/{nome}', [RelatoController::class, 'confirmar']);
 });
-Route::middleware('auth:sanctum')->post('/usuario/consulta-cpf-siape', [UsuarioController::class, 'consultaCPFSiape']);
-Route::middleware('auth:sanctum')->post('/unidade/consulta-unidade-siape', [UnidadeController::class, 'consultaUnidadeSiape']);
-Route::middleware(['auth:sanctum'])->prefix('SolucaoUnidade')->group(function () {
-  defaultRoutes(SolucaoUnidadeController::class);
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/usuario/consultar-cpf-siape', [UsuarioController::class, 'consultarCPFSiape']);
+    Route::post('/usuario/exportar-cpf-siape', [UsuarioController::class, 'exportarCPFSiape']);
+    Route::post('/usuario/download-cpf-siape', [UsuarioController::class, 'downloadLogSiape']);
+    Route::post('/unidade/consultar-unidade-siape', [UnidadeController::class, 'consultaUnidadeSiape']);
+    Route::post('/unidade/exportar-unidade-siape', [UnidadeController::class, 'exportarUnidadeSiape']);
+    Route::post('/unidade/download-unidade-siape', [UnidadeController::class, 'downloadLogSiape']);
+    Route::post('/usuario/processar-siape', [SiapeIndividualController::class, 'processaServidor']);
+    Route::post('/unidade/processar-siape', [SiapeIndividualController::class, 'processaUnidade']);
+
+    Route::prefix('SolucaoUnidade')->group(function () {
+        defaultRoutes(SolucaoUnidadeController::class);
+    });
 });
 
+Route::middleware(['auth:sanctum'])->prefix('Relatorio')->group(function () {
+    Route::post('planos-trabalho/query', [RelatorioController::class, 'queryPlanosTrabalho']);
+    //Route::post('planos-trabalho/csv', [RelatorioController::class, 'queryPlanosTrabalho']);
+    Route::post('planos-trabalho/xls', [RelatorioController::class, 'queryPlanosTrabalho']);
+
+    Route::post('planos-trabalho-detalhado/query', [RelatorioController::class, 'queryPlanosTrabalhoDetalhado']);
+    //Route::post('planos-trabalho-detalhado/csv', [RelatorioController::class, 'queryPlanosTrabalhoDetalhado']);
+    Route::post('planos-trabalho-detalhado/xls', [RelatorioController::class, 'queryPlanosTrabalhoDetalhado']);
+
+    Route::post('planos-entrega/query', [RelatorioPlanoEntregaController::class, 'query']);
+    Route::post('planos-entrega/xls', [RelatorioPlanoEntregaController::class, 'query']);
+});
+
+Route::middleware(['auth:sanctum'])->prefix('RelatorioAgente')->group(function () {
+    Route::post('query', [RelatorioAgenteController::class, 'query']);
+    Route::post('xls', [RelatorioAgenteController::class, 'query']);
+});
+
+Route::middleware(['auth:sanctum'])->prefix('RelatorioUnidade')->group(function () {
+    Route::post('query', [RelatorioUnidadeController::class, 'query']);
+    Route::post('xls', [RelatorioUnidadeController::class, 'query']);
+});
+
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::post('/impersonate', [ImpersonationController::class, 'impersonate'])
+        ->middleware('auth:sanctum')
+        ->name('impersonate');
+  Route::get('/impersonate/stop', [ImpersonationController::class, 'stopImpersonating'])->name('impersonate.stop');
+});
+
+Route::middleware(['auth:sanctum'])->prefix('Relatorio')->group(function () {
+    Route::post('planos-trabalho/query', [RelatorioController::class, 'queryPlanosTrabalho']);
+    Route::post('planos-trabalho/csv', [RelatorioController::class, 'queryPlanosTrabalho']);
+    Route::post('planos-trabalho/xls', [RelatorioController::class, 'queryPlanosTrabalho']);
+
+    Route::post('planos-trabalho-detalhado/query', [RelatorioController::class, 'queryPlanosTrabalhoDetalhado']);
+    Route::post('planos-trabalho-detalhado/csv', [RelatorioController::class, 'queryPlanosTrabalhoDetalhado']);
+    Route::post('planos-trabalho-detalhado/xls', [RelatorioController::class, 'queryPlanosTrabalhoDetalhado']);
+});

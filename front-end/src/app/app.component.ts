@@ -20,10 +20,11 @@ export type Contexto = "EXECUCAO" | "GESTAO" | "ADMINISTRADOR" | "DEV" | "PONTO"
 export type Schema = {
   name: string,
   permition?: string,
-  route: string[],
+  route?: string[],
   metadata?: RouteMetadata,
   params?: any,
-  icon: string
+  icon: string;
+  onClick?: () => void;
 };
 export type MenuSchema = { [key: string]: Schema };
 export type MenuItem = {
@@ -181,10 +182,37 @@ export class AppComponent {
       LOGS_ALTERACOES: { name: "Log das Alterações", permition: '', route: ['logs', 'change'], icon: this.entity.getIcon('Change') },
       LOGS_ERROS: { name: "Log dos Erros", permition: '', route: ['logs', 'error'], icon: this.entity.getIcon('Error') },
       LOGS_TRAFEGOS: { name: "Log do Tráfego", permition: '', route: ['logs', 'traffic'], icon: this.entity.getIcon('Traffic') },
+      TESTE_IMPERSONATE: { name: "Teste IMPERSONATE", permition: '', route: ['impersonate'], icon: this.entity.getIcon('Teste') },
       LOGS_ENVIOS: { name: "Log dos Envios à API PGD", permition: '', route: ['logs', 'envios'], icon: this.entity.getIcon('Envio') },
       DEV_CPF_CONSULTA_SIAPE: { name: "Consulta CPF SIAPE", permition: '', route: ['consultas', 'cpf-siape'], icon: this.entity.getIcon('ConsultaCPFSIAPE') },
-      DEV_UNIDADE_CONSULTA_SIAPE: { name: "Consulta Unidade SIAPE", permition: '', route: ['consultas', 'cpf-unidade'], icon: this.entity.getIcon('ConsultaUnidadeSIAPE') },
-      
+      DEV_UNIDADE_CONSULTA_SIAPE: { name: "Consulta Unidade SIAPE", permition: '', route: ['consultas', 'unidade-siape'], icon: this.entity.getIcon('ConsultaUnidadeSIAPE') },
+            /* RELATORIOS */
+      RELATORIO_PLANO_TRABALHO: {
+        name: this.lex.translate("Planos de Trabalho"),
+        permition: 'MOD_RELATORIO_PT',
+        route: ['relatorios', 'planos-trabalho'],
+        icon: this.entity.getIcon('PlanoTrabalho')
+      },
+      RELATORIO_PLANO_ENTREGA: {
+        name: this.lex.translate("Planos de Entrega"),
+        permition: 'MOD_RELATORIO_PE',
+        route: ['relatorios', 'planos-entrega'],
+        icon: this.entity.getIcon('PlanoEntrega')
+      },
+      RELATORIO_USUARIOS: {
+        name: this.lex.translate("Agentes Públicos"),
+        permition: 'MOD_RELATORIO_USUARIO',
+        icon: this.entity.getIcon('Usuario'),
+        route: ['relatorios', 'agentes'],
+      },
+      RELATORIO_UNIDADES: {
+        name: "Unidades",
+        permition: 'MOD_RELATORIO_UNIDADE',
+        icon: this.entity.getIcon('Unidade'),
+        route: ['relatorios', 'unidades'],
+        //onClick: ()=> this.emDesenvolvimento()
+      },
+      /* Outros */
       PAINEL: { name: "Painel", permition: '', route: ['panel'], icon: "" },
       AUDITORIA: { name: "Auditoria", permition: '', route: ['configuracoes', 'sobre'], icon: "" }
     };
@@ -249,6 +277,16 @@ export class AppComponent {
         // this.menuSchema.TIPOS_MOTIVOS_AFASTAMENTOS,
         this.menuSchema.TIPOS_TAREFAS
       ].sort(this.orderMenu)
+    }, {
+      name: this.lex.translate("Relatórios"),
+      permition: "MOD_RELATORIOS",
+      id: "navbarDropdownRelatorios",
+      menu: [
+        this.menuSchema.RELATORIO_PLANO_TRABALHO,
+        this.menuSchema.RELATORIO_PLANO_ENTREGA,
+        this.menuSchema.RELATORIO_USUARIOS,
+        this.menuSchema.RELATORIO_UNIDADES
+      ].sort(this.orderMenu)
     }];
 
     this.moduloExecucao = [
@@ -256,7 +294,15 @@ export class AppComponent {
       this.menuSchema.ATIVIDADES,
       Object.assign({}, this.menuSchema.CONSOLIDACOES, { params: { tab: "UNIDADE" } }),
       //this.menuSchema.AFASTAMENTOS,
-      this.menuSchema.OCORRENCIAS
+      this.menuSchema.OCORRENCIAS,
+      {
+        name: this.lex.translate("Relatórios"),
+        permition: "MOD_RELATORIOS",
+        id: "navbarDropdownRelatorios",
+        menu: [
+          this.menuSchema.RELATORIO_USUARIOS
+        ].sort(this.orderMenu)
+      }
     ];
 
     this.moduloAdministrador = [{
@@ -292,6 +338,16 @@ export class AppComponent {
         this.menuSchema.USUARIOS,
         this.menuSchema.PERFIS
       ].sort(this.orderMenu)
+    }, {
+      name: this.lex.translate("Relatórios"),
+      permition: "MOD_RELATORIOS",
+      id: "navbarDropdownRelatorios",
+      menu: [
+        this.menuSchema.RELATORIO_PLANO_TRABALHO,
+        this.menuSchema.RELATORIO_PLANO_ENTREGA,
+        this.menuSchema.RELATORIO_USUARIOS,
+        this.menuSchema.RELATORIO_UNIDADES
+      ].sort(this.orderMenu)
     }];
 
     this.moduloDev = [{
@@ -311,6 +367,13 @@ export class AppComponent {
         this.menuSchema.LOGS_ERROS,
         this.menuSchema.LOGS_TRAFEGOS,
         this.menuSchema.LOGS_ENVIOS
+      ]
+    }, {
+      name: this.lex.translate("Testes"),
+      permition: "MENU_DEV_ACESSO",
+      id: "navbarDropdownDevTestes",
+      menu: [
+        this.menuSchema.TESTE_IMPERSONATE,
       ]
     }, {
       name: this.lex.translate("Consultas"),
@@ -348,7 +411,7 @@ export class AppComponent {
       default: return [];
     }
   }
- 
+
   public ngAfterViewInit() {
     /* Container para a criação de dialogs */
     this.dialog.container = this.dialogs;
@@ -433,6 +496,10 @@ export class AppComponent {
 
   public logout() {
     this.auth.logOut();
+  }
+
+  public emDesenvolvimento() {
+    this.dialog.alert('Atenção', 'Item em desenvolvimento');
   }
 
 }

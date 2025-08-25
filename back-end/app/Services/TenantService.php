@@ -43,7 +43,7 @@ class TenantService extends ServiceBase
             Log::info('Iniciando cadastro de tenant...');
             $tenant = parent::store($dataOrEntity, $unidade, false);
             if($tenant){
-                $this->JobAgendadoService->createJobsSiape($tenant->id);
+                $this->JobScheduleService->createJobsSiape($tenant->id);
             }
         } catch (\Exception $e) {
             throw $e;
@@ -56,6 +56,19 @@ class TenantService extends ServiceBase
         $model = $this->getModel();
         $entity = UtilService::emptyEntry($dataOrEntity, "id") ? null : $model::find($dataOrEntity["id"]);
         $entity = isset($entity) ? $entity : new $model();
+
+        if (isset($dataOrEntity['id']) && str_contains($dataOrEntity['id'], ' ')) {
+            throw new ServerException("Tenant", "O campo SIGLA não pode conter espaços.");
+        }   
+
+        $domainExists = DB::table('domains')
+            ->where('domain', $dataOrEntity['dominio_url'])
+            ->exists();
+        if ($domainExists && $action != "EDIT" && $dataOrEntity['dominio_url'] != $entity->dominio_url) {
+            throw new ServerException("Tenant", "O domínio já está cadastrado.");
+        }
+   
+
         try {
             $entity->fill($dataOrEntity);
             $entity->save();

@@ -7,7 +7,10 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\ControllerBase;
 use App\Exceptions\ServerException;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\File;
 use Throwable;
+use ZipArchive;
+use Illuminate\Http\Response;
 
 class UnidadeController extends ControllerBase
 {
@@ -83,12 +86,32 @@ class UnidadeController extends ControllerBase
       ]);
     }  catch (IBaseException $e) {
       return response()->json(['error' => $e->getMessage()]);
+    }
+    catch (Throwable $e) {
+        $dataError = throwableToArrayLog($e);
+        Log::error($dataError);
+        return response()->json(['error' => "Codigo ".$dataError['code'].": Ocorreu um erro inesperado."]);
+    }
   }
-  catch (Throwable $e) {
-      $dataError = throwableToArrayLog($e);
-      Log::error($dataError);
-      return response()->json(['error' => "Codigo ".$dataError['code'].": Ocorreu um erro inesperado."]);
-  }
+
+  public function subordinadas(Request $request)
+  {
+    try {
+      $data = $request->validate([
+        'unidade_id' => ['required']
+      ]);
+      return response()->json([
+        'success' => true,
+        'subordinadas' => $this->service->subordinadas($data["unidade_id"])
+      ]);
+    }  catch (IBaseException $e) {
+      return response()->json(['error' => $e->getMessage()]);
+    }
+    catch (Throwable $e) {
+        $dataError = throwableToArrayLog($e);
+        Log::error($dataError);
+        return response()->json(['error' => "Codigo ".$dataError['code'].": Ocorreu um erro inesperado."]);
+    }
   }
 
   public function metadadosUnidade(Request $request)
@@ -256,30 +279,29 @@ class UnidadeController extends ControllerBase
   }
 
   public function consultaUnidadeSiape(Request $request){
-    $data = $request->validate([
-      'unidade' => [],
-    ]);
-    $nomeArquivo = 'dados_unidade_' . $data['unidade'] . '.xml';
-    try{
-      $retorno = $this->service->consultaUnidadeSiape($data['unidade']);
+     $data = $request->validate([
+            'unidade' => [],
+        ]);
 
-       $tempFile = tempnam(sys_get_temp_dir(), 'xml');
-       file_put_contents($tempFile, $retorno->asXML());
-
-       return response()->download($tempFile, $nomeArquivo,
-       [
-        'Content-Type' => 'application/xml',
-        'Content-Disposition' => sprintf('attachment; filename="%s"',$nomeArquivo),
-    ])->deleteFileAfterSend(true);
-
-  } catch (\Throwable $th) {
-        $tempFile = tempnam(sys_get_temp_dir(), 'txt');
-        $mensagemErro = date('Y-m-d H:i:s') . " - " . $th->getMessage() . PHP_EOL;
-
-        file_put_contents($tempFile, $mensagemErro, FILE_APPEND);
-
-        return response()->download($tempFile, $nomeArquivo)->deleteFileAfterSend(true);
-   }
+      try {
+        $retorno = $this->service->consultaUnidadeSiape($request->unidade);
+        if (empty($retorno)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nenhum dado encontrado para a unidade informada.'
+            ], Response::HTTP_NOT_FOUND);
+        }
+        return response()->json([
+            'success' => true,
+            'dados' => $retorno,
+        ]);
+        }  catch (Throwable $e) {
+            report($e);
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], Response::HTTP_BAD_REQUEST);
+        }
   }
 
   public function obterInstitudora(Request $request)
@@ -303,7 +325,7 @@ class UnidadeController extends ControllerBase
 
         $unidadeId = $unidade->unidade_pai_id;
       }
-  
+
     } catch (IBaseException $e) {
       return response()->json(['error' => $e->getMessage()]);
     } catch (Throwable $e) {
@@ -311,7 +333,65 @@ class UnidadeController extends ControllerBase
       Log::error($dataError);
       return response()->json(['error' => "Codigo ".$dataError['code'].": Ocorreu um erro inesperado."]);
     }
-    
+
     return response()->json(['error' => "Não foi possível identificar a instituidora da unidade."]);
   }
+
+  public function exportarUnidadeSiape(Request $request)
+    {
+        $data = $request->validate([
+        'unidade' => [],
+        ]);
+
+        $nomeArquivo = 'dados_unidade_' . $data['unidade'] . '.zip';
+
+        try{
+            $retorno = $this->service->consultaUnidadeSiapeXml($request->unidade);
+            Log::alert("dadosUnidadeSiapeXml", ['unidade' => $request->unidade, 'retornos' => $retorno->asXML()]);
+            $zipFile = tempnam(sys_get_temp_dir(), 'zip');
+            $zip = new ZipArchive();
+            $code =  $zip->open($zipFile, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+            if ($code !== true) {
+              throw new \RuntimeException("Falha ao criar o ZIP em {$zipFile} (código $code)");
+            }
+                $tempFile = tempnam(sys_get_temp_dir(), 'xml');
+                file_put_contents($tempFile, $retorno->asXML());
+                $zip->addFile($tempFile, "arquivo_{$request->unidade}.xml");
+
+            $zip->close();
+
+            return response()->download($zipFile, $nomeArquivo, [
+                'Content-Type' => 'application/zip',
+                'Content-Disposition' => sprintf('attachment; filename="%s"',$nomeArquivo),
+            ])->deleteFileAfterSend(true);
+
+        } catch (\Throwable $th) {
+            report($th);
+            $tempFile = tempnam(sys_get_temp_dir(), 'txt');
+            $mensagemErro = date('Y-m-d H:i:s') . " - " . $th->getMessage() . PHP_EOL;
+
+            file_put_contents($tempFile, $mensagemErro, FILE_APPEND);
+
+            return response()->download($tempFile, $nomeArquivo)->deleteFileAfterSend(true);
+        }
+    }
+
+    public function downloadLogSiape(Request $request)
+    {
+        $logPath = storage_path('logs/siape.log');
+
+        if (!file_exists($logPath)) {
+            return response()->json(['error' => 'Arquivo de log não encontrado.'], 404);
+        }
+
+        return response()->download(
+            $logPath,
+            'siape.log',
+            [
+                'Content-Type' => File::mimeType($logPath),
+                'Content-Disposition' => 'attachment; filename="siape.log"',
+            ]
+        );
+    }
+
 }
