@@ -63,3 +63,5 @@ setup-sync-scripts.sh
 sync-data-only.sh
 sync-compressed.sh
 sync-prod-to-hom.sh
+restore-data-hom.sh
+sync-complete.sh
