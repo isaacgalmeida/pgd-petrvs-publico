@@ -28,19 +28,23 @@ left join tipos_modalidades modalidade_siape on (tms.tipo_modalidade_id = modali
 -- - tms.tipo_modalidade_id: ID da modalidade no SIAPE
 -- - tm.id: ID da modalidade do último plano de trabalho no PETRVS
 
--- CONSULTA COMPLETA SIMPLIFICADA:
+-- CONSULTA COMPLETA SIMPLIFICADA - APENAS REGISTROS COM DIFERENÇAS:
 SELECT 
     u.nome,
     u.matricula,
+    un.sigla AS unidade_sigla,
     u.situacao_siape,
     COALESCE(modalidade_siape.nome, tms.nome) AS modalidadeSouGov,
     tm.nome AS tipoModalidadeNome,
-    case 
-        when u.situacao_siape = 'INATIVO' OR (COALESCE(tms.tipo_modalidade_id, '') = COALESCE(tm.id, '') AND COALESCE(tm.id, '') = '' ) then '-'
-        when COALESCE(tms.tipo_modalidade_id, '') = COALESCE(tm.id, '') then 'IGUAL'
-        else 'DIFERENTE'
-    end as comparacaoSouGovPetrvs
+    CASE 
+        WHEN u.situacao_siape = 'INATIVO' OR (COALESCE(tms.tipo_modalidade_id, '') = COALESCE(tm.id, '') AND COALESCE(tm.id, '') = '') THEN '-'
+        WHEN COALESCE(tms.tipo_modalidade_id, '') = COALESCE(tm.id, '') THEN 'IGUAL'
+        ELSE 'DIFERENTE'
+    END as comparacaoSouGovPetrvs
 FROM usuarios u
+LEFT JOIN unidades_integrantes ui ON (ui.usuario_id = u.id AND ui.deleted_at IS NULL)
+LEFT JOIN unidades_integrantes_atribuicoes uia ON (uia.unidade_integrante_id = ui.id AND uia.atribuicao = 'LOTADO' AND uia.deleted_at IS NULL)
+LEFT JOIN unidades un ON (un.id = ui.unidade_id)
 LEFT JOIN tipos_modalidades_siape tms ON (tms.id = u.modalidade_pgd)
 LEFT JOIN tipos_modalidades modalidade_siape ON (tms.tipo_modalidade_id = modalidade_siape.id)
 LEFT JOIN (
@@ -63,4 +67,8 @@ LEFT JOIN (
       )
 ) pt_ultimo_pactuado ON (pt_ultimo_pactuado.usuario_id = u.id)
 LEFT JOIN tipos_modalidades tm ON (tm.id = pt_ultimo_pactuado.tipo_modalidade_id)
-WHERE u.deleted_at IS NULL;
+WHERE u.deleted_at IS NULL
+  AND u.situacao_siape != 'INATIVO'
+  AND NOT (COALESCE(tms.tipo_modalidade_id, '') = COALESCE(tm.id, '') AND COALESCE(tm.id, '') = '')
+  AND COALESCE(tms.tipo_modalidade_id, '') != COALESCE(tm.id, '')
+ORDER BY un.sigla, u.nome;
