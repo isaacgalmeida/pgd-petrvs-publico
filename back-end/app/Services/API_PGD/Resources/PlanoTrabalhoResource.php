@@ -8,6 +8,9 @@ use Illuminate\Http\Resources\Json\JsonResource;
 use App\Services\CalendarioService;
 use Carbon\Carbon;
 
+/**
+ * @mixin \App\Models\PlanoTrabalho
+ */
 class PlanoTrabalhoResource extends JsonResource
 {
     public function toArray($request)
@@ -46,8 +49,6 @@ class PlanoTrabalhoResource extends JsonResource
     function converteStatus($status)
     {
         switch ($status) {
-            case 'CANCELADO':
-                return 1;
             case 'ATIVO':
                 return 3;
             case 'CONCLUIDO':

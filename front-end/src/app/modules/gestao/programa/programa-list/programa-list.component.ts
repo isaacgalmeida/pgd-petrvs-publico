@@ -1,7 +1,7 @@
 import { Component, Injector, ViewChild } from '@angular/core';
 import { FormGroup } from '@angular/forms';
 import { GridComponent } from 'src/app/components/grid/grid.component';
-import { ToolbarButton } from 'src/app/components/toolbar/toolbar.component';
+import { ToolbarButton } from 'src/app/components/toolbar/toolbar-types';
 import { ProgramaDaoService } from 'src/app/dao/programa-dao.service';
 import { Base } from 'src/app/models/base.model';
 import { Programa } from 'src/app/models/programa.model';
@@ -9,9 +9,10 @@ import { PageListBase } from 'src/app/modules/base/page-list-base';
 import { ProgramaService } from 'src/app/services/programa.service';
 
 @Component({
-  selector: 'app-programa-list',
-  templateUrl: './programa-list.component.html',
-  styleUrls: ['./programa-list.component.scss']
+    selector: 'app-programa-list',
+    templateUrl: './programa-list.component.html',
+    styleUrls: ['./programa-list.component.scss'],
+    standalone: false
 })
 export class ProgramaListComponent extends PageListBase<Programa, ProgramaDaoService> {
   @ViewChild(GridComponent, { static: false }) public grid?: GridComponent;
@@ -36,25 +37,9 @@ export class ProgramaListComponent extends PageListBase<Programa, ProgramaDaoSer
     this.addOption(this.OPTION_INFORMACOES);
     this.addOption(this.OPTION_EXCLUIR, "MOD_PRGT_EXCL");
     this.addOption(this.OPTION_LOGS, "MOD_AUDIT_LOG");
-    // Testa se o usuário possui permissão para visualizar os participantes do programa de gestão
-    if (this.auth.hasPermissionTo("MOD_PART")) {
-      this.options.push({
-        icon: "bi bi-people",
-        label: "Participantes",
-        onClick: (programa: Programa) => this.go.navigate({route: ["gestao", "programa", programa.id, "participantes"]}, {metadata: {'programa': programa}})
-      });
-    }
 
     this.BOTAO_CONCLUIR = { label: "Concluir", icon: "bi bi-journal-check", onClick:this.concluir.bind(this) };
 
-
-/*     if (this.auth.hasPermissionTo("MOD_PART")) {
-      this.options.push({
-        icon: "bi bi-folder",
-        label: "Desdobramentos",
-        onClick: (programa: Programa) => this.go.navigate({route: ["gestao", "desdobramento", programa.id, "programa"]})
-      });
-    } */
   }
 
   public dynamicButtons(row: Programa): ToolbarButton[] {
@@ -73,11 +58,19 @@ export class ProgramaListComponent extends PageListBase<Programa, ProgramaDaoSer
   }
 
   public filterWhere = (filter: FormGroup) => {
-    let result: any[] = [];
-    let form: any = filter.value;
-    if(this.vigentesUnidadeExecutora) result.push(['vigentesUnidadeExecutora',"==",this.auth.unidade!.id]);
-    if(this.todosUnidadeExecutora || !this.util.isDeveloper()) result.push(['todosUnidadeExecutora',"==",this.auth.unidade!.id]);
-    if(form.nome?.length) {
+    const result: any[] = [];
+    const form: any = filter.value;
+    const unidadeId = this.auth.unidade?.id;
+
+    if (unidadeId) {
+      if (this.vigentesUnidadeExecutora) {
+        result.push(['vigentesUnidadeExecutora', '==', unidadeId]);
+      } else if (this.todosUnidadeExecutora || !this.auth.hasPermissionTo("MOD_PRGT_VER_TODOS")) {
+        result.push(['todosUnidadeExecutora', '==', unidadeId]);
+      }
+    }
+
+    if (form.nome?.length) {
       result.push(["nome", "like", "%" + form.nome.trim().replace(" ", "%") + "%"]);
     }
 

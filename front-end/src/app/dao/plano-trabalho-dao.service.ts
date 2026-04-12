@@ -36,7 +36,7 @@ export class PlanoTrabalhoDaoService extends DaoBaseService<PlanoTrabalho> {
     this.programaDao = injector.get<ProgramaDaoService>(ProgramaDaoService);
     this.planoTrabalhoEntregaDao = injector.get<PlanoTrabalhoEntregaDaoService>(PlanoTrabalhoEntregaDaoService);
     this.lookup = injector.get<LookupService>(LookupService);
-    this.inputSearchConfig.searchFields = ["numero", "data_inicio", "data_fim", "usuario.nome"];
+    this.inputSearchConfig.searchFields = ["numero", "data_inicio", "data_fim"];
     this.inputSearchConfig.display = (data: any[]) => "#" + data[0] + ": " + this.util.getDateFormatted(data[1]) + " a " + this.util.getDateFormatted(data[2]) + " - " + data[3];
   }
 
@@ -159,6 +159,18 @@ export class PlanoTrabalhoDaoService extends DaoBaseService<PlanoTrabalho> {
           reject(response.error);
         } else {
           resolve(!!response?.success);
+        }
+      }, error => reject(error));
+    });
+  }
+
+  public planosUsuarioComPendencias(usuarioId: string) {
+    return new Promise<boolean>((resolve, reject) => {
+      this.server.post('api/' + this.collection + '/planos-usuario-com-pendencias', { usuario_id: usuarioId }).subscribe(response => {
+        if (response.error) {
+          reject(response.error);
+        } else {
+          resolve(response?.dados || false);
         }
       }, error => reject(error));
     });

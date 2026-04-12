@@ -1,6 +1,7 @@
 <?php
 
-$app_file = file_exists("../public/app.json") ? file_get_contents("../public/app.json") : "{'version': '1.0.0'}";
+$app_file_name = dirname(__FILE__)."/../public/app.json";
+$app_file = file_exists($app_file_name) ? file_get_contents($app_file_name) : "{'version': '1.0.0'}";
 $app_json = json_decode($app_file, true) ?? ["version" => "1.0.1"];
 
 return [
@@ -163,6 +164,7 @@ return [
         Illuminate\Redis\RedisServiceProvider::class,
         Illuminate\Auth\Passwords\PasswordResetServiceProvider::class,
         Illuminate\Session\SessionServiceProvider::class,
+        App\Providers\TenancySessionServiceProvider::class,
         Illuminate\Translation\TranslationServiceProvider::class,
         Illuminate\Validation\ValidationServiceProvider::class,
         Illuminate\View\ViewServiceProvider::class,
@@ -175,6 +177,7 @@ return [
         /*
          * Application Service Providers...
          */
+        App\Providers\RepositoryServiceProvider::class,
         App\Providers\AppServiceProvider::class,
         App\Providers\AuthServiceProvider::class,
         // App\Providers\BroadcastServiceProvider::class,
@@ -183,11 +186,11 @@ return [
         App\Providers\RouteServiceProvider::class,
         App\Providers\TelescopeServiceProvider::class,
         App\Providers\TenancyServiceProvider::class,
-        App\Providers\TenancySessionServiceProvider::class,
         Maatwebsite\Excel\ExcelServiceProvider::class,
         App\Providers\UtilServiceProvider::class,
         Lab404\Impersonate\ImpersonateServiceProvider::class,
         OwenIt\Auditing\AuditingServiceProvider::class,
+        App\Providers\DatabaseTuningServiceProvider::class,
     ],
 
     /*

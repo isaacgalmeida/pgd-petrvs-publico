@@ -14,12 +14,16 @@ import { UnidadeIntegranteDaoService } from 'src/app/dao/unidade-integrante-dao.
 import { IntegranteConsolidado } from 'src/app/models/unidade-integrante.model';
 import { InputSearchComponent } from 'src/app/components/input/input-search/input-search.component';
 
+type Regramento = IIndexable & { nome: string; };
+
 @Component({
-  selector: 'app-usuario-form',
-  templateUrl: './usuario-form.component.html',
-  styleUrls: ['./usuario-form.component.scss']
+    selector: 'app-usuario-form',
+    templateUrl: './usuario-form.component.html',
+    styleUrls: ['./usuario-form.component.scss'],
+    standalone: false
 })
 export class UsuarioFormComponent extends PageFormBase<Usuario, UsuarioDaoService> {
+  canEditAtribuicoes = false;
   @ViewChild(EditableFormComponent, { static: false }) public editableForm?: EditableFormComponent;
   @ViewChild(UsuarioIntegranteComponent, { static: false }) public unidadesIntegrantes?: UsuarioIntegranteComponent;
   @ViewChild('lotacao', { static: false }) public lotacao?: InputSearchComponent;
@@ -29,6 +33,7 @@ export class UsuarioFormComponent extends PageFormBase<Usuario, UsuarioDaoServic
   public integranteDao: UnidadeIntegranteDaoService;
   public planoTrabalhoDao: PlanoTrabalhoDaoService;
   public planoDataset: TemplateDataset[];
+  public regramentos: Regramento[] = [];
 
   constructor(public injector: Injector) {
     super(injector, Usuario, UsuarioDaoService);
@@ -41,6 +46,9 @@ export class UsuarioFormComponent extends PageFormBase<Usuario, UsuarioDaoServic
       nome: { default: "" },
       cpf: { default: "" },
       apelido: { default: "" },
+      participa_pgd: { default: ""},
+      modalidade_pgd: { default: ""},
+      tipo_modalidade_id: { default: null },
       usuario_externo: { default: true },
       telefone: { default: "" },
       uf: { default: "" },
@@ -51,12 +59,22 @@ export class UsuarioFormComponent extends PageFormBase<Usuario, UsuarioDaoServic
       situacao_siape: { default: 'ATIVO' },
     }, this.cdRef, this.validate);
     this.planoDataset = this.planoTrabalhoDao.dataset();
-    this.join = ["auditsExterno", "ultimoPlanoTrabalhoAtivo.documentos"]
+    this.join = [
+      "auditsExterno",
+      "ultimoPlanoTrabalhoAtivo.documentos",
+      "tipoModalidadeSiape"
+    ]
   }
 
   public async loadData(entity: Usuario, form: FormGroup): Promise<void> {
     let formValue = Object.assign({}, form.value);
     form.patchValue(this.util.fillForm(formValue, entity));
+
+    this.regramentos = [];
+    if (entity?.regramentos) {
+      this.regramentos = entity.regramentos?.map((nome, index) => ({ id: index, nome }));
+    }
+
     await this.unidadesIntegrantes?.loadData(entity);
   }
 
@@ -106,6 +124,11 @@ export class UsuarioFormComponent extends PageFormBase<Usuario, UsuarioDaoServic
 
   public titleEdit = (entity: Usuario): string => {
     return "Editando " + this.lex.translate("Usuário") + ': ' + (entity?.nome || "");
+  }
+  
+  ngOnInit() {
+    super.ngOnInit();
+    this.canEditAtribuicoes = this.snapshot?.data['canEditAtribuicoes'] ?? false;
   }
 
 }

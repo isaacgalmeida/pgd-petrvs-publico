@@ -5,15 +5,16 @@ import moment from 'moment';
 import { UtilService } from 'src/app/services/util.service';
 
 @Component({
-  selector: 'input-datetime',
-  templateUrl: './input-datetime.component.html',
-  styleUrls: ['./input-datetime.component.scss'],
-  viewProviders: [
-    {
-      provide: ControlContainer,
-      useExisting: FormGroupDirective
-    }
-  ]
+    selector: 'input-datetime',
+    templateUrl: './input-datetime.component.html',
+    styleUrls: ['./input-datetime.component.scss'],
+    viewProviders: [
+        {
+            provide: ControlContainer,
+            useExisting: FormGroupDirective
+        }
+    ],
+    standalone: false
 })
 export class InputDatetimeComponent extends InputBase implements OnInit {
   @HostBinding('class') class = 'form-group';
@@ -125,7 +126,7 @@ export class InputDatetimeComponent extends InputBase implements OnInit {
   }
 
   public get hasTimeInput(): boolean {
-    return !this.isDate && (this.isTime || this.isFirefox);
+    return !this.isDate && (this.isTime || this.isTime24hours);
   }
 
   ngAfterViewInit() {
@@ -147,8 +148,15 @@ export class InputDatetimeComponent extends InputBase implements OnInit {
     const strTime = this.timeInput?.nativeElement.value || "00:00:00";
     let value = this.value; 
     try {
-      //let newValue = this.isTime ? strTime : this.util.strToDate(!this.isDate && this.isFirefox ? strDate + "T" + strTime : strDate);
-      value = this.isTime ? strTime : new Date(strDate + (strDate.includes("T") ? "" : "T" + strTime));
+      if (this.isTime) {
+        value = strTime;
+      } else {
+        const dateTimeStr = strDate + (strDate.includes("T") ? "" : "T" + strTime);
+        const m = moment(dateTimeStr);
+        if (!m.isValid()) throw new Error("Data inválida");
+        value = m.toDate();
+      }
+
       if((this.isTime && !this.util.isTimeValid(value)) || (!this.isTime && !this.util.isDataValid(value))) {
         throw new Error("Data inválida");
       }
@@ -165,10 +173,19 @@ export class InputDatetimeComponent extends InputBase implements OnInit {
   }
 
   public getDateValue() {
-    return !this.value || !(this.value instanceof Date) ? null : this.isFirefox || this.isDate ? moment(this.value).format("YYYY-MM-DD") : moment(this.value).format("YYYY-MM-DDTHH:mm");
+    if (!this.value) return null;
+    const date = moment(this.value);
+    if (!date.isValid()) return null;
+
+    if (this.isDate || this.isTime24hours) {
+      return date.format("YYYY-MM-DD");
+    } else {
+      return date.format("YYYY-MM-DDTHH:mm");
+    }
   }
 
   public getTimeValue() {
+    const strTime = this.timeInput?.nativeElement.value || "00:00:00";
     return !this.value ? null : this.value instanceof Date ? moment(this.value).format("HH:mm") : this.util.isTimeValid(this.value) ? this.value.substr(0, 5) : null;
   }
 

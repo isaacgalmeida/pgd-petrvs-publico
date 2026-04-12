@@ -5,6 +5,9 @@ use Illuminate\Http\Resources\Json\JsonResource;
 use Carbon\Carbon;
 use App\Exceptions\ExportPgdException;
 
+/**
+ * @mixin \App\Models\PlanoEntrega
+ */
 class PlanoEntregaResource extends JsonResource
 {
     public function toArray($request)
@@ -32,8 +35,6 @@ class PlanoEntregaResource extends JsonResource
     function getStatus()
     {
         switch ($this->status) {
-            case 'CANCELADO':
-                return 1;
             case 'ATIVO':
                 return 3;
             case 'CONCLUIDO':

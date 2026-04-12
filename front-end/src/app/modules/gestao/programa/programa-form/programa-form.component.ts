@@ -16,9 +16,10 @@ import { TemplateService } from 'src/app/modules/uteis/templates/template.servic
 import { LookupItem } from 'src/app/services/lookup.service';
 
 @Component({
-  selector: 'app-programa-form',
-  templateUrl: './programa-form.component.html',
-  styleUrls: ['./programa-form.component.scss']
+    selector: 'app-programa-form',
+    templateUrl: './programa-form.component.html',
+    styleUrls: ['./programa-form.component.scss'],
+    standalone: false
 })
 
 export class ProgramaFormComponent extends PageFormBase<Programa, ProgramaDaoService> {
@@ -86,8 +87,8 @@ export class ProgramaFormComponent extends PageFormBase<Programa, ProgramaDaoSer
 
     if (['nome', 'unidade_id', 'tipo_avaliacao_plano_trabalho_id', 'tipo_avaliacao_plano_entrega_id'].indexOf(controlName) >= 0 && !control.value?.length) {
       result = "Obrigatório";
-    } else if (controlName == "prazo_max_plano_entrega" && parseInt(control.value || 0) > 99999) {
-      result = "Inválido";
+    } else if (controlName == "prazo_max_plano_entrega" && ((parseInt(control.value || 0) > 365) || parseInt(control.value || 0) < 0)) {
+      result = "Deve ser um valor entre 0 e 365 dias";
     } else if (controlName == "dias_tolerancia_consolidacao" && parseInt(control.value || 0) > 10) {
       result = "Inválido. Máximo 10 dias";
     } else if (['data_inicio', 'data_fim'].indexOf(controlName) >= 0 && !this.dao?.validDateTime(control.value)) {

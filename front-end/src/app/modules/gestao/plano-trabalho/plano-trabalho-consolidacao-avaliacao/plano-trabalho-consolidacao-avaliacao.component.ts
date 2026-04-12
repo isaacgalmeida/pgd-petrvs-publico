@@ -1,6 +1,7 @@
 import { Component, Injector, ViewChild } from '@angular/core';
 import { FormGroup } from '@angular/forms';
-import { GridComponent, GridGroupSeparator } from 'src/app/components/grid/grid.component';
+import { GridComponent } from 'src/app/components/grid/grid.component';
+import { GridGroupSeparator } from 'src/app/components/grid/grid-types';
 import { PageListBase } from 'src/app/modules/base/page-list-base';
 import { UsuarioDaoService } from 'src/app/dao/usuario-dao.service';
 import { PlanoTrabalhoConsolidacao } from 'src/app/models/plano-trabalho-consolidacao.model';
@@ -11,16 +12,17 @@ import { Base } from 'src/app/models/base.model';
 import { TipoAvaliacao } from 'src/app/models/tipo-avaliacao.model';
 import { PlanoTrabalho } from 'src/app/models/plano-trabalho.model';
 import { AvaliacaoDaoService } from 'src/app/dao/avaliacao-dao.service';
-import { ToolbarButton } from 'src/app/components/toolbar/toolbar.component';
+import { ToolbarButton } from 'src/app/components/toolbar/toolbar-types';
 import { PlanoTrabalhoService } from '../plano-trabalho.service';
 import { Programa } from 'src/app/models/programa.model';
 import { LookupItem } from 'src/app/services/lookup.service';
 import { UnidadeService } from 'src/app/services/unidade.service';
 
 @Component({
-  selector: 'app-plano-trabalho-consolidacao-avaliacao',
-  templateUrl: './plano-trabalho-consolidacao-avaliacao.component.html',
-  styleUrls: ['./plano-trabalho-consolidacao-avaliacao.component.scss']
+    selector: 'app-plano-trabalho-consolidacao-avaliacao',
+    templateUrl: './plano-trabalho-consolidacao-avaliacao.component.html',
+    styleUrls: ['./plano-trabalho-consolidacao-avaliacao.component.scss'],
+    standalone: false
 })
 
 export class PlanoTrabalhoConsolidacaoAvaliacaoComponent extends PageListBase<PlanoTrabalhoConsolidacao, PlanoTrabalhoConsolidacaoDaoService> {
@@ -73,8 +75,9 @@ export class PlanoTrabalhoConsolidacaoAvaliacaoComponent extends PageListBase<Pl
     this.title = "Avaliações " + this.lex.translate("das Consolidações");
     this.code = "MOD_PTR_CSLD_AVAL";
     this.filter = this.fh.FormBuilder({
-      usuario_id: {default: ""},
-      unidade_id: {default: ""},
+      numero: {default: null},
+      usuario_id: {default: null},
+      unidade_id: {default: null},
       unidades_subordinadas: {default: false},
       incluir_arquivados: {default: false}
     });
@@ -95,6 +98,7 @@ export class PlanoTrabalhoConsolidacaoAvaliacaoComponent extends PageListBase<Pl
 //    if(form.usuario_id?.length) result.push(["usuario_id", "==", form.usuario_id]);
     if(form.usuario_id?.length) result.push(["plano_trabalho.usuario.id", "==", form.usuario_id]);
     if(form.unidade_id?.length) result.push(["plano_trabalho.unidade.id", "==", form.unidade_id]);
+    if(form.numero) result.push(["plano_trabalho.numero", "==", String(form.numero).trim()]);
     if(form.unidades_subordinadas) result.push(["unidades_subordinadas", "==", true]);
     if(form.incluir_arquivados) result.push(["incluir_arquivados", "==", true]);
     return result;
@@ -124,6 +128,7 @@ export class PlanoTrabalhoConsolidacaoAvaliacaoComponent extends PageListBase<Pl
 
   public onGridLoad(rows?: Base[]) {
     this.extra = (this.grid?.query || this.query!).extra;
+
     if(this.extra) {
       this.planos_trabalhos = ((this.planos_trabalhos || []) as PlanoTrabalho[]).concat(this.extra?.planos_trabalhos || []);
       this.programas = ((this.programas || []) as Programa[]).concat(this.extra?.programas || []);      
@@ -131,11 +136,19 @@ export class PlanoTrabalhoConsolidacaoAvaliacaoComponent extends PageListBase<Pl
         let plano = p as PlanoTrabalho;
         plano.programa = this.programas?.find((x: Programa) => x.id == plano.programa_id);
       });
-      rows?.forEach(v => {
-        let consolidacao = v as PlanoTrabalhoConsolidacao;
-        consolidacao.plano_trabalho = this.planos_trabalhos?.find((x: PlanoTrabalho) => x.id == consolidacao.plano_trabalho_id);
-        if(consolidacao.avaliacao) consolidacao.avaliacao.tipo_avaliacao = this.extra?.tipos_avaliacoes?.find((x: TipoAvaliacao) => x.id == consolidacao.avaliacao!.tipo_avaliacao_id);
-      });
+      if (rows) {
+        for (let i = rows.length - 1; i >= 0; i--) {
+          const consolidacao = rows[i] as PlanoTrabalhoConsolidacao;
+          consolidacao.plano_trabalho = this.planos_trabalhos?.find((x: PlanoTrabalho) => x.id == consolidacao.plano_trabalho_id);
+          if (!consolidacao.plano_trabalho) {
+            rows.splice(i, 1);
+            continue;
+          }
+          if (consolidacao.avaliacao) {
+            consolidacao.avaliacao.tipo_avaliacao = this.extra?.tipos_avaliacoes?.find((x: TipoAvaliacao) => x.id == consolidacao.avaliacao!.tipo_avaliacao_id);
+          }
+        }
+      }
     }
   }
 
@@ -149,10 +162,6 @@ export class PlanoTrabalhoConsolidacaoAvaliacaoComponent extends PageListBase<Pl
   public dynamicButtons(row: any): ToolbarButton[] {
     let result: ToolbarButton[] = [];
     let consolidacao: PlanoTrabalhoConsolidacao = row as PlanoTrabalhoConsolidacao;
-
-   
-    
-    
     let programa: Programa = consolidacao.plano_trabalho!.programa!;
     let isAvaliador: boolean = false;
     const usuarioId = consolidacao.plano_trabalho!.usuario_id;
@@ -210,18 +219,10 @@ export class PlanoTrabalhoConsolidacaoAvaliacaoComponent extends PageListBase<Pl
   }
 
   public initGrid(grid: GridComponent) {
-    grid.queryInit();
-  }
-
-  public filterWhereHistorico = (filter: FormGroup) => {
-    let result: any[] = [];
-    let form: any = filter.value;
-    result.push(["status", "in", ["AVALIADO"]]);
-    if(form.usuario_id?.length) result.push(["plano_trabalho.usuario.id", "==", form.usuario_id]);
-    if(form.unidade_id?.length) result.push(["plano_trabalho.unidade.id", "==", form.unidade_id]);
-    if(form.unidades_subordinadas) result.push(["unidades_subordinadas", "==", true]);
-    if(form.incluir_arquivados) result.push(["incluir_arquivados", "==", true]);
-    return result;
+    // Não inicializa a query aqui para permitir que o onLoad padrão
+    // aplique queryParams.filter antes da primeira execução da query.
+    // A inicialização ocorrerá via PageListBase.onLoad.
+    // if(!grid.query) grid.queryInit();
   }
 
   public getAvaliacoes(row: any) {
@@ -236,29 +237,15 @@ export class PlanoTrabalhoConsolidacaoAvaliacaoComponent extends PageListBase<Pl
     } finally {
       this.loading = false;
     }
-  }
-
-  public onGridLoadHistorico(rows?: Base[]) {
-    this.extra = (this.grid?.query || this.query!).extra;
-    let planosTrabalhos = (this.extra?.planos_trabalhos || []) as PlanoTrabalho[];
-
-
-
-    planosTrabalhos.forEach(p => {
-      let plano = p as PlanoTrabalho;
-      plano.programa = this.extra?.programas?.find((x: Programa) => x.id == plano.programa_id);
-    });
-    rows?.forEach(v => {
-      this.consolidacaoId?.push(v.id);
-      let consolidacao = v as PlanoTrabalhoConsolidacao;
-      consolidacao.plano_trabalho = this.extra?.planos_trabalhos?.find((x: PlanoTrabalho) => x.id == consolidacao.plano_trabalho_id);
-      if(consolidacao.avaliacao) consolidacao.avaliacao.tipo_avaliacao = this.extra?.tipos_avaliacoes?.find((x: TipoAvaliacao) => x.id == consolidacao.avaliacao!.tipo_avaliacao_id);
-    });
-    this.loadData();
-  }
+  }  
 
   public getNota(row:any) {
     return row.tipo_avaliacao.notas.find((x: any) => x.codigo == row.nota);
   }
-}
 
+  protected avaliacaoStatus(status: string) : string | undefined {
+    return {
+      "CONCLUIDO": "Aguardando Avaliação"
+    }[status]
+  }
+}

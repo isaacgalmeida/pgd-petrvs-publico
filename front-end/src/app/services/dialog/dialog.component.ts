@@ -29,22 +29,19 @@ export type DialogButton = {
 };
 
 @Component({
-	selector: "app-dialog",
-	templateUrl: "./dialog.component.html",
-	styleUrls: ["./dialog.component.scss"],
-	providers: [
-		{
-			provide: "ID_GENERATOR_BASE",
-			useFactory: (
-				self: DialogComponent,
-				go: NavigateService,
-				util: UtilService
-			) => {
-				return util.onlyAlphanumeric(go.getStackRouteUrl());
-			},
-			deps: [DialogComponent, NavigateService, UtilService],
-		},
-	],
+    selector: "app-dialog",
+    templateUrl: "./dialog.component.html",
+    styleUrls: ["./dialog.component.scss"],
+    providers: [
+        {
+            provide: "ID_GENERATOR_BASE",
+            useFactory: (self: DialogComponent, go: NavigateService, util: UtilService) => {
+                return util.onlyAlphanumeric(go.getStackRouteUrl());
+            },
+            deps: [DialogComponent, NavigateService, UtilService],
+        },
+    ],
+    standalone: false
 })
 export class DialogComponent implements OnInit {
 	@Input() iconTitle?: string;
@@ -85,6 +82,9 @@ export class DialogComponent implements OnInit {
 	public minimized: boolean = false;
 	public templateContext: any;
 	public templateResult?: Promise<DialogTemplateResult>;
+	public inputValue: string = "";
+	public defaultValue: string = "";
+	public isPrompt: boolean = false;
 
 	private _factory?: ComponentFactoryResolver;
 	public get factory(): ComponentFactoryResolver {
@@ -188,6 +188,7 @@ export class DialogComponent implements OnInit {
 				this.modalWidth = parseInt(
 					this.route.queryParams?.modalWidth || modal.modalWidth
 				);
+				modal.modalInfiniteScrollContainer = `#${this.id}`;
 				(modal.titleSubscriber as Subject<string>).subscribe((title) => {
 					this.title = title;
 					this.cdRef.detectChanges();

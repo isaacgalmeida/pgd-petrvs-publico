@@ -2,9 +2,14 @@
 
 namespace App\Services;
 
+use App\Models\PlanoTrabalhoEntrega;
 use App\Services\ServiceBase;
+use App\Services\PlanoTrabalhoService;
 use App\Exceptions\ServerException;
 
+/**
+ * @property PlanoTrabalhoService $planoTrabalhoService
+ */
 class PlanoTrabalhoEntregaService extends ServiceBase
 {
 
@@ -23,4 +28,14 @@ class PlanoTrabalhoEntregaService extends ServiceBase
     $this->planoTrabalhoService->repactuar($planoTrabalhoEntrega->plano_trabalho_id, true);      
   }
 
+
+  public function hasContribuicao($idEntrega)
+  {
+      if (!is_array($idEntrega)) {
+        $idEntrega = [$idEntrega];
+      }
+      
+      return PlanoTrabalhoEntrega::whereIn('plano_entrega_entrega_id', $idEntrega)
+          ->whereNull('deleted_at');
+  }
 }

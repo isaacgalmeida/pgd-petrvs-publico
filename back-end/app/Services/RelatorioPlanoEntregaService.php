@@ -22,7 +22,6 @@ class RelatorioPlanoEntregaService extends ServiceBase
                 && ($item[0] !== 'incluir_unidades_subordinadas')
                 && ($item[0] !== 'periodoInicio')
                 && ($item[0] !== 'periodoFim')
-                && ($item[0] !== 'situacao_conclusao')
                 && ($item[0] !== 'unidade_id');
         }));
 
@@ -39,7 +38,7 @@ class RelatorioPlanoEntregaService extends ServiceBase
         }
 
         if (isset($unidadeId[2]) && isset($subordinadas[2])) {
-            $unidadeService = new UnidadeService();
+            $unidadeService = app(UnidadeService::class);
             $subordinadasIds = $unidadeService->subordinadas($unidadeId[2])->pluck('id')->toArray();
             $unidadeIds = array_merge($unidadeIds, $subordinadasIds);
         }

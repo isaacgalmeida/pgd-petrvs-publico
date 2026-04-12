@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\Atribuicao as EnumsAtribuicao;
 use App\Exceptions\LogError;
 use App\Exceptions\NotFoundException;
 use App\Exceptions\ServerException;
@@ -13,6 +14,10 @@ use App\Services\ServiceBase;
 use App\Services\Siape\DadosExternosSiape;
 use App\Services\Siape\Unidade\Atribuicao;
 use App\Models\UnidadeIntegrante;
+use App\Repository\UnidadeRepository;
+use App\Repository\UnidadeIntegranteRepository;
+use App\Repository\UnidadeIntegranteAtribuicaoRepository;
+use App\Repository\UsuarioRepository;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use DateTime;
@@ -20,11 +25,54 @@ use DateTimeZone;
 use SimpleXMLElement;
 use Throwable;
 use Carbon\Carbon;
+use App\Services\Siape\ProcessaDadosSiapeBD;
+use App\Exceptions\ErrorDataSiapeFaultCodeException;
+use App\Exceptions\ValidateException;
+use Illuminate\Support\Facades\Session;
 
+
+/**
+ * @property CalendarioService $calendarioService
+ * @property PlanoTrabalhoService $planoService
+ * @property UsuarioService $usuarioService
+ * @property UnidadeIntegranteService $UnidadeIntegranteService
+ * @property PlanoEntregaService $planoEntrega
+ */
 class UnidadeService extends ServiceBase
 {
 
     use DadosExternosSiape, Atribuicao;
+    public static $CACHE_LINHA_ASCENDENTE = [];
+
+    public function __construct(
+        private UnidadeIntegranteRepository $unidadeIntegranteRepository,
+        private UnidadeIntegranteAtribuicaoRepository $unidadeIntegranteAtribuicaoRepository,
+        private UsuarioRepository $usuarioRepository,
+        private UnidadeRepository $unidadeRepository,
+        $collection = null
+    ) {
+        parent::__construct($collection);
+    }
+
+    public function getUnidadeIntegranteRepository(): UnidadeIntegranteRepository
+    {
+        return $this->unidadeIntegranteRepository;
+    }
+
+    public function getUnidadeIntegranteAtribuicaoRepository(): UnidadeIntegranteAtribuicaoRepository
+    {
+        return $this->unidadeIntegranteAtribuicaoRepository;
+    }
+
+    public function getUsuarioRepository(): UsuarioRepository
+    {
+        return $this->usuarioRepository;
+    }
+
+    public function getUnidadeRepository(): UnidadeRepository
+    {
+        return $this->unidadeRepository;
+    }
 
     public function validateStore($data, $unidade, $action)
     {
@@ -82,12 +130,25 @@ class UnidadeService extends ServiceBase
 
     public function hora($idOrUnidade)
     {
-        $unidade = gettype($idOrUnidade) == "string" ? Unidade::find($idOrUnidade) : $idOrUnidade;
-        $timeZone = $unidade->cidade?->timezone ?? -3;
-        $timezone_abbr = timezone_name_from_abbr("", -3600 * abs($timeZone), 0);
-        $dateTime = new DateTime('now', new DateTimeZone($timezone_abbr));
+        $key = is_string($idOrUnidade) ? $idOrUnidade : $idOrUnidade->id;
+        if (Session::has($key)) {
+            return Session::get($key);
+        }
+        
+        
+        $unidade = is_string($idOrUnidade)
+            /** @phpstan-ignore-next-line */
+            ? Unidade::with('cidade')->find($idOrUnidade)
+            : ($idOrUnidade?->load('cidade'));
+        $timeZoneOffset = $unidade->cidade?->timezone ?? -3;
+
+        $calendarioService = new CalendarioService;
+        $timezone = $calendarioService->utcToTimezone($timeZoneOffset);
+        $dateTime = new DateTime('now', new DateTimeZone($timezone));
         $dateTime->setTimestamp($dateTime->getTimestamp());
-        return ServiceBase::toIso8601($dateTime);
+        $result = ServiceBase::toIso8601($dateTime);
+        Session::put($key, $result);
+        return $result;
     }
 
     public function inativar($id, $inativo)
@@ -148,6 +209,7 @@ class UnidadeService extends ServiceBase
         $unidadePrincipal = Unidade::find($unidade_id);
         $unidades_ids = [$unidade_id];
         $unidades_ids = array_merge($unidades_ids, $this->unidadesFilhas($unidade_id));
+        $aux = [];
         foreach ($unidades_ids as $id) {
             $temp = $this->metadadosUnidade($id, $programa_id);
             if ($id == $unidade_id) $aux = $temp;
@@ -181,7 +243,7 @@ class UnidadeService extends ServiceBase
         /*         if ((count(array_filter($dadosUnidades, fn($p) => $p['mediaAvaliacoes'] != null)) == 0)) {
                 $dadosArea['mediaAvaliacoes'] = null;
             } else {
-                $dadosArea['mediaAvaliacoes'] = $this->utilService->avg(array_map(fn($u) => $u['mediaAvaliacoes'],array_filter($dadosUnidades, fn($u) => $u['mediaAvaliacoes'] != null)));
+                $dadosArea['mediaAvaliacoes'] = UtilService::avg(array_map(fn($u) => $u['mediaAvaliacoes'],array_filter($dadosUnidades, fn($u) => $u['mediaAvaliacoes'] != null)));
             } */
         $dadosArea['percentualHorasNaoIniciadas'] = $dadosArea['horasUteisTotais'] == 0 ? 0 : $dadosArea['horasAtividadesNaoIniciadas'] / $dadosArea['horasUteisTotais'];
         $dadosArea['percentualHorasEmAndamento'] = $dadosArea['horasUteisTotais'] == 0 ? 0 : $dadosArea['horasAtividadesEmAndamento'] / $dadosArea['horasUteisTotais'];
@@ -201,7 +263,7 @@ class UnidadeService extends ServiceBase
     /**
      * Retorna os usuários lotados na unidade
      *
-     * @param string $unidade_id O ID de uma Unidade.
+     * @param string $unidadeId O ID de uma Unidade.
      * @return array
      */
     public function lotados($unidadeId): array
@@ -210,6 +272,7 @@ class UnidadeService extends ServiceBase
             return $this->getBuffer("lotados", $unidadeId);
         }
 
+        /** @phpstan-ignore-next-line */
         $result = Unidade::with("lotados.usuario")
             ->find($unidadeId)?->lotados
             ->map(fn($integrante) => $integrante->usuario)
@@ -236,6 +299,7 @@ class UnidadeService extends ServiceBase
      */
     public function metadadosUnidade($unidade_id, $programa_id): array
     {
+        /** @phpstan-ignore-next-line */
         $unidade = Unidade::where('id', $unidade_id)->with(['planosTrabalho', 'planosTrabalho.atividades', 'planosTrabalho.tipoModalidade'])->first();
         $metadadosPlanosTrabalho = [];
         foreach ($unidade['planosTrabalho']->toArray() as $plano) {
@@ -267,18 +331,24 @@ class UnidadeService extends ServiceBase
                 return $acum + $item;
             }, 0)
         ];
+        /** @phpstan-ignore-next-line */
         $result['percentualHorasNaoIniciadas'] = $result['horasUteisTotais'] == 0 ? 0 : $result['horasAtividadesNaoIniciadas'] / $result['horasUteisTotais'];
+        /** @phpstan-ignore-next-line */
         $result['percentualHorasEmAndamento'] = $result['horasUteisTotais'] == 0 ? 0 : $result['horasAtividadesEmAndamento'] / $result['horasUteisTotais'];
+        /** @phpstan-ignore-next-line */
         $result['percentualHorasConcluidas'] = $result['horasUteisTotais'] == 0 ? 0 : $result['horasAtividadesConcluidas'] / $result['horasUteisTotais'];
+        /** @phpstan-ignore-next-line */
         $result['percentualHorasTotaisAlocadas'] = $result['horasUteisTotais'] == 0 ? 0 : $result['horasTotaisAlocadas'] / $result['horasUteisTotais'];
+        /** @phpstan-ignore-next-line */
         $result['percentualPlanoDecorrido'] = $result['horasUteisTotais'] == 0 ? 0 : $result['horasUteisDecorridas'] / $result['horasUteisTotais'];
+
 
         /** Neste trecho calcula-se a média das avaliações de toda a Unidade, partindo-se da média das avaliações de cada Plano de Trabalho considerado.
          *  Se um dado Plano de Trabalho possui mediaAvaliacoes = null, é porque ele não possui nenhuma demanda ainda avaliada. Neste caso, a media das avaliações deste Plano
          *  de Trabalho (null) não será utilizada no cálculo da média da Unidade, caso contrário a média seria indevidamente afetada. A função array_map prepara o array com
          * os valores válidos das médias das avaliações dos Planos, que será enviado à função avg para o cálculo da média aritmética.
          */
-        /*         $result['mediaAvaliacoes'] = (count(array_filter($metadadosPlanosTrabalho, fn($p) => $p['mediaAvaliacoes'] != null)) == 0) ? null : $this->utilService->avg(array_map(function($p) {
+        /*         $result['mediaAvaliacoes'] = (count(array_filter($metadadosPlanosTrabalho, fn($p) => $p['mediaAvaliacoes'] != null)) == 0) ? null : UtilService::avg(array_map(function($p) {
                 if ($p['mediaAvaliacoes'] != null) return $p['mediaAvaliacoes'];
             }, $metadadosPlanosTrabalho)); */
 
@@ -292,7 +362,9 @@ class UnidadeService extends ServiceBase
      */
     public function planosEntregaEmCurso(string $unidade_id): array
     {
+        /** @phpstan-ignore-next-line */
         $unidade = Unidade::where("id", $unidade_id)->with(["planos_entrega"])->get()->first();
+        /** @phpstan-ignore-next-line */
         return array_filter($unidade->planosEntrega, fn($x) => $this->planoEntrega->emCurso($x));
     }
 
@@ -305,11 +377,13 @@ class UnidadeService extends ServiceBase
         $dataInativacao = $this->extractWhere($data, "data_inativacao");                    //  	data_inativacao (selectable)
         $inativos = empty($dataInativacao) || $dataInativacao[1] == "!=" ? true : false;    //  		!= null		......................	retornar somente as unidades inativas   => $inativos = true
 
+        // atribuição de chefe, chefe substituto ou delegado
+        $apenasChefiadas = $this->extractWhere($data, "apenas_chefiadas");
 
         foreach ($data["where"] as $condition) {                                             //  		== null		......................	retornar somente as unidades ativas     => $inativos = false
-            if (is_array($condition) && $condition[0] == "subordinadas") {                   //  	inativos (not selectable)
-                $subordinadas = $condition[2];                                              //  		== true		......................	retornar unidades ativas e inativas     => $inativos = true
-            } else if (is_array($condition) && $condition[0] == "inativos") {                //  		== false	......................	retornar somente as unidades ativas     => $inativos = false
+            if (is_array($condition) && $condition[0] == "subordinadas") {                   //  		inativos (not selectable)
+                $subordinadas = $condition[2];                                              //  			== true		......................	retornar unidades ativas e inativas     => $inativos = true
+            } else if (is_array($condition) && $condition[0] == "inativos") {                //  			== false	......................	retornar somente as unidades ativas     => $inativos = false
                 $inativos = $condition[2];
             } else {
                 array_push($where, $condition);
@@ -319,8 +393,25 @@ class UnidadeService extends ServiceBase
         if (!empty($dataInativacao) || empty($inativos)) array_push($where, ["data_inativacao", $inativos ? "!=" : "==", null]);
 
         if (!$usuario->hasPermissionTo("MOD_UND_TUDO")) {
-            $areasTrabalhoWhere = $this->usuarioService->areasTrabalhoWhere($subordinadas, null, "unidades");
+            $areasTrabalhoWhere = $this->usuarioService->areasTrabalhoWhere($subordinadas, "unidades");
             $where[] = new RawWhere("($areasTrabalhoWhere)", []);
+        }
+        
+
+
+        if($apenasChefiadas && $apenasChefiadas[2]){
+            // Consulta unidades onde o usuário tem atribuição de chefe, chefe substituto ou delegado
+            $atribuicoes = UnidadeIntegrante::select("unidade_id")
+                ->where('usuario_id', $usuario->id)
+                ->whereHas('atribuicoes', function($query) {
+                    $query->whereIn('atribuicao', [EnumsAtribuicao::GESTOR->value,EnumsAtribuicao::GESTOR_SUBSTITUTO->value, EnumsAtribuicao::DELEGADO->value]);
+                })
+                ->whereNull('deleted_at')
+                ->pluck('unidade_id')
+                ->toArray(); 
+            // Filtrar apenas unidades chefiadas pelo usuário
+            $where[] = ['id', 'in', $atribuicoes];
+
         }
 
         // utilize para exibir apenas a unidades a partir de um determinado pai
@@ -349,17 +440,8 @@ class UnidadeService extends ServiceBase
 
     public function proxyStore($data, $unidade, $action)
     {
-        $unidade = Unidade::find($data["id"]);
-        $pai = Unidade::find($data["unidade_pai_id"]);
-        $data["path"] = empty($pai) ? null : $pai->path . "/" . $pai->id;
-        if (!empty($unidade)) { // Depois de atualizar o campo 'path' da unidade, atualiza os campos 'path' de todas suas unidades-filhas
-            $oldPath = $unidade->path . "/" . $unidade->id . "/";
-            $newPath = $data["path"] . "/" . $unidade->id . "/";
-            Unidade::where('path', 'like', $oldPath . "%")
-                ->update(['path' => DB::raw(sprintf("CONCAT('%s', SUBSTR(path, %d))", $newPath, strlen($newPath)))]);
-        }
         /* Armazena as informações que serão necessárias no extraStore */
-        $this->buffer["integrantes"] = $this->UtilService->getNested($data, "integrantes") ?? [];
+        $this->buffer["integrantes"] = UtilService::getNested($data, "integrantes") ?? [];
         return $data;
     }
 
@@ -375,42 +457,25 @@ class UnidadeService extends ServiceBase
      * Retorna um array com os IDs de todas as suas unidades-filhas, ou seja,
      * de todas as Unidades que estão hierarquicamente organizadas abaixo da Unidade-mãe.
      *
-     * @param string $unidade_id O ID de uma Unidade-mãe.
+     * @param string $unidadeId O ID de uma Unidade-mãe.
      * @return array
      */
     public function unidadesFilhas($unidadeId): array
     {
-        $path = DB::table('unidades')->select('path')->where('id', $unidadeId)->first()->path . '/' . $unidadeId;
-        return array_map(fn($x) => $x->id, DB::table('unidades')->select('id')->where('path', 'like', $path)->orWhere('path', 'like', $path . '/%')->get()->toArray());
+        try {
+            return $this->subordinadas($unidadeId)->pluck('id')->toArray();
+        } catch (NotFoundException $e) {
+            return [];
+        }
     }
 
     /**
-     * @param string | null $unidadeId Unidade de refêrneica (caso null, então irá retornar somente a unidade raiz)
+     * Retorna todas as unidades com apenas os campos necessários para montar a árvore no front-end
      */
-    function hierarquia($unidadeId)
+    public function hierarquia()
     {
-        $unidades = [];
-        $unidades_irmaos = [];
-        $irmaos = [];
-        $unidade = null;
-
-        if (!empty($unidadeId)) {
-            $unidade = Unidade::find($unidadeId);
-            if ($unidade) {
-                $unidades = Unidade::whereIn("id", array_filter(explode('/', $unidade->path), fn($x) => $x != ""))->get()->toArray();
-                $this->obterIrmaosRecursivamente($unidade, $irmaos);
-            }
-        } else {
-            $unidade = Unidade::where('unidade_pai_id', null)->first();
-            if ($unidade) {
-                $unidades = Unidade::whereIn("id", array_filter(explode('/', $unidade->path), fn($x) => $x != ""))->get();
-                $unidades = $unidades->toArray();
-                $unidades[] = $unidade;
-            }
-        }
-        $mergedArray = array_merge($unidades, $irmaos, $unidades_irmaos, [$unidade]);
-
-        return $mergedArray;
+        // Retorna todas as unidades com apenas os campos necessários para montar a árvore no front-end
+        return Unidade::select('id', 'sigla', 'nome', 'unidade_pai_id')->setEagerLoads([])->get()->all();
     }
 
     function filhas($unidadeId)
@@ -421,7 +486,7 @@ class UnidadeService extends ServiceBase
     public function subordinadas($id)
     {
 
-        $unidade = Unidade::findOrFail($id);
+        $unidade = Unidade::query()->setEagerLoads([])->findOrFail($id);
 
         if (!$unidade) {
             throw new NotFoundException("Unidade não encontrada");
@@ -429,7 +494,7 @@ class UnidadeService extends ServiceBase
 
         // Obtém todas as unidades subordinadas de forma recursiva
         $subordinadas = collect(); // Inicializa uma Collection vazia
-        $filhas = Unidade::where('unidade_pai_id', $id)->get(); // Obtém as unidades filhas diretas
+        $filhas = Unidade::query()->setEagerLoads([])->where('unidade_pai_id', $id)->get(); // Obtém as unidades filhas diretas
 
         foreach ($filhas as $filha) {
             $subordinadas->push($filha); // Adiciona a unidade filha à lista
@@ -445,7 +510,7 @@ class UnidadeService extends ServiceBase
     private function buscarSubordinadasRecursivamente($unidade)
     {
         $subordinadas = collect();
-        $filhas = Unidade::where('unidade_pai_id', $unidade->id)->get();
+        $filhas = Unidade::query()->setEagerLoads([])->where('unidade_pai_id', $unidade->id)->get();
 
         foreach ($filhas as $filha) {
             $subordinadas->push($filha);
@@ -488,6 +553,7 @@ class UnidadeService extends ServiceBase
                     foreach ($changes as $change) {
                         $delta = [];
                         $delta[$contraint->COLUMN_NAME] = $de;
+                        /** @phpstan-ignore-next-line */
                         ModelBase::customLogChange($contraint->TABLE_NAME, $change->id, "EDIT", $delta);
                     }
                 }
@@ -509,12 +575,48 @@ class UnidadeService extends ServiceBase
      */
     public function linhaAscendente($unidade_id): array
     {
-        $path = Unidade::find($unidade_id)->path;
-        if (!empty($path)) {
-            return array_filter(explode('/', $path), fn($x) => $x != "");
-        } else {
-            return [$unidade_id];
+        
+        if (array_key_exists($unidade_id, self::$CACHE_LINHA_ASCENDENTE)) {
+            return self::$CACHE_LINHA_ASCENDENTE[$unidade_id];
         }
+
+        $result = [];
+        $current = DB::table('unidades')->select('id', 'unidade_pai_id')->where('id', $unidade_id)->first();
+
+        while ($current) {
+            $result[] = $current->id;
+            $current = $current->unidade_pai_id
+                ? DB::table('unidades')->select('id', 'unidade_pai_id')->where('id', $current->unidade_pai_id)->first()
+                : null;
+        }
+
+        $result = array_reverse($result);
+        self::$CACHE_LINHA_ASCENDENTE[$unidade_id] = $result;
+        return $result;
+    }
+
+    /**
+     * Retorna um array com os programas que compõem a linha hierárquica ascendente da unidade recebida como parâmetro.
+     * @param string $unidade_id
+     * @return array
+     */
+    public function regramentosAscendentes($unidade_id): array
+    {
+        $unidades = $this->linhaAscendente($unidade_id);
+        $programas = Programa::whereIn('unidade_id', $unidades)->where('data_fim', '>=', now())->get()->toArray();
+        return $programas;
+    }
+
+    /**
+     * Retorna um boolean indicando se a unidade recebida como parâmetro está na linha do programa recebido.
+     * @param string $unidade_id
+     * @param string $programa_id
+     * @return boolean
+     */
+    public function unidadeEhHabilitada($unidade_id, $programa_id): bool
+    {
+        $programas = $this->regramentosAscendentes($unidade_id);
+        return collect($programas)->pluck('id')->contains($programa_id);
     }
 
     public function lookupTodasUnidades(): array
@@ -528,7 +630,7 @@ class UnidadeService extends ServiceBase
     public function unidadesEmPgd(): array
     {
         // (RN_PENT_G) Uma vez homologado um Plano de Entregas, a Unidade do plano está em PGD;
-        return Unidade::with(['planosEntrega' => function ($query) {
+        return Unidade::with(['planosEntrega' => function ($query) { /** @phpstan-ignore-line */
             $query->where('status', 'ATIVO');
         }])->whereHas('planosEntrega')->get()->map(fn($u) => $u->id)->toArray();
     }
@@ -541,18 +643,36 @@ class UnidadeService extends ServiceBase
         if ($this->hasBuffer("gestoresUnidadeSuperior", $unidadeId)) {
             return $this->getBuffer("gestoresUnidadeSuperior", $unidadeId);
         } else {
-            $unidadeSup = Unidade::find($unidadeId)?->unidadePai;
+            $unidadeSupId = Unidade::query()
+                ->select('unidade_pai_id')
+                ->find($unidadeId)?->unidade_pai_id;
+
+            if (empty($unidadeSupId)) {
+                return $this->setBuffer("gestoresUnidadeSuperior", $unidadeId, [
+                    "gestor" => null,
+                    "gestoresSubstitutos" => [],
+                    "gestoresDelegados" => [],
+                ]);
+            }
+
+            /** @phpstan-ignore-next-line */
+            $unidadeSup = Unidade::with([
+                'gestor.usuario',
+                'gestoresSubstitutos.usuario',
+                'gestoresDelegados.usuario',
+            ])->find($unidadeSupId);
+
             return $this->setBuffer("gestoresUnidadeSuperior", $unidadeId, [
                 "gestor" => $unidadeSup?->gestor?->usuario,
                 "gestoresSubstitutos" => $unidadeSup?->gestoresSubstitutos->map(fn($x) => $x->usuario)->toArray() ?? [],
-                "gestoresDelegados" => $unidadeSup?->gestoresDelegados->map(fn($x) => $x->usuario)->toArray() ?? []
+                "gestoresDelegados" => $unidadeSup?->gestoresDelegados->map(fn($x) => $x->usuario)->toArray() ?? [],
             ]);
         }
     }
 
     /**
      * Retorna um array com os usuários que são gestores (titular, substitutos e delegados) da unidade recebida como parâmetro.
-     * @param string $unidade_id
+     * @param string $unidadeId
      * @return array
      */
     public function gestoresUnidade($unidadeId): array
@@ -584,35 +704,49 @@ class UnidadeService extends ServiceBase
             return []; // garante que não será null
         }
 
+        $unidade->loadMissing([
+            'gestor' => fn($q) => $q->select('id', 'usuario_id', 'unidade_id'),
+            'gestoresSubstitutos' => fn($q) => $q->select('id', 'usuario_id', 'unidade_id'),
+            'gestoresDelegados' => fn($q) => $q->select('id', 'usuario_id', 'unidade_id'),
+            'unidadePai.gestor' => fn($q) => $q->select('id', 'usuario_id', 'unidade_id'),
+            'unidadePai.gestoresSubstitutos' => fn($q) => $q->select('id', 'usuario_id', 'unidade_id'),
+        ]);
+
+        $gestorTitularId = $unidade->gestor?->usuario_id;
+        $substitutosIds   = $unidade->gestoresSubstitutos?->pluck('usuario_id')->all() ?? [];
+        $delegadosIds     = $unidade->gestoresDelegados?->pluck('usuario_id')->all() ?? [];
+        $paiGestorId      = $unidade->unidadePai?->gestor?->usuario_id;
+        $paiSubstitutosIds = $unidade->unidadePai?->gestoresSubstitutos?->pluck('usuario_id')->all() ?? [];
+
         $atribuicoes = $this->usuarioService->atribuicoesGestor($unidade->id, $usuarioId);
 
         if ($atribuicoes["gestor"]) {
             return array_values(array_filter([
-                $unidade->unidadePai?->gestor?->usuario_id,
-                ...($unidade->unidadePai?->gestoresSubstitutos?->pluck('usuario_id')->toArray() ?? [])
+                $paiGestorId,
+                ...$paiSubstitutosIds
             ]));
         }
 
         if ($atribuicoes["gestorSubstituto"]) {
             return array_values(array_filter(array_merge(
-                [$unidade->gestor?->usuario_id, $unidade->unidadePai?->gestor?->usuario_id],
-                $unidade->unidadePai?->gestoresSubstitutos?->pluck('usuario_id')->toArray() ?? [],
-                $unidade->gestoresSubstitutos?->reject(fn($g) => $g->usuario_id == $participanteId)->pluck('usuario_id')->toArray() ?? []
+                [$gestorTitularId, $paiGestorId],
+                $paiSubstitutosIds,
+                array_values(array_filter($substitutosIds, fn($id) => $id != $participanteId))
             )));
         }
 
         if ($atribuicoes["gestorDelegado"]) {
             return array_values(array_filter(array_merge(
-                [$unidade->gestor?->usuario_id],
-                $unidade->gestoresSubstitutos?->pluck('usuario_id')->toArray() ?? []
+                [$gestorTitularId],
+                $substitutosIds
             )));
         }
 
         // Se o usuário não é gestor, substituto ou delegado, retorna somente o gestor titular e os substitutos
 
         $gestores = array_values(array_filter(array_merge(
-            [$unidade->gestor?->usuario_id],
-            $unidade->gestoresSubstitutos?->pluck('usuario_id')->toArray() ?? []
+            [$gestorTitularId],
+            $substitutosIds
         )));
 
         if (count($gestores) > 0) {
@@ -620,8 +754,8 @@ class UnidadeService extends ServiceBase
         } else {
             // Se não houver gestores, retorna o gestor da unidade superior
             return array_values(array_filter([
-                $unidade->unidadePai?->gestor?->usuario_id,
-                ...($unidade->unidadePai?->gestoresSubstitutos?->pluck('usuario_id')->toArray() ?? [])
+                $paiGestorId,
+                ...$paiSubstitutosIds
             ]));
         }
     }
@@ -640,31 +774,34 @@ class UnidadeService extends ServiceBase
       */
 
     public function consultaUnidadeSiape(string $unidadecodigoSiape): array
-{
-    $retornoXml = $this->buscaDadosUnidade($unidadecodigoSiape);
+    {
+        $retornoXml = $this->buscaDadosUnidade($unidadecodigoSiape);
 
-    $retornoXml->registerXPathNamespace('soap', 'http://schemas.xmlsoap.org/soap/envelope/');
-    $retornoXml->registerXPathNamespace('ns1',  'http://servico.wssiapenet');
+        try {
+            $retornoXml = (new ProcessaDadosSiapeBD())->prepareResponseUorgXml($unidadecodigoSiape, $retornoXml->asXML());
+            Log::info("Dados processados para unidade $unidadecodigoSiape", [$retornoXml->asXML()]);
+        } catch (ErrorDataSiapeFaultCodeException $e) {
+            report($e);
+            return [];
+        }
 
-    $resultado = $retornoXml->xpath('//soap:Body/ns1:dadosUorgResponse/out');
+        $retornoXml->registerXPathNamespace('soap', 'http://schemas.xmlsoap.org/soap/envelope/');
+        $retornoXml->registerXPathNamespace('ns1',  'http://servico.wssiapenet');
 
-    if (!isset($resultado[0]) || !($resultado[0] instanceof SimpleXMLElement)) {
-        Log::error("Não foi possível encontrar <out> em dadosUorgResponse");
-        return [];
+        $resultado = $retornoXml->xpath('//soap:Body/ns1:dadosUorgResponse/out');
+
+        if (!isset($resultado[0]) || !($resultado[0] instanceof SimpleXMLElement)) {
+            Log::error("Não foi possível encontrar <out> em dadosUorgResponse");
+            return [];
+        }
+
+        /** @var SimpleXMLElement $out */
+        $out = $resultado[0];
+
+        $retornoArray = simpleXmlElementToArrayComNamespace($out);
+
+        return $retornoArray;
     }
-
-    /** @var SimpleXMLElement $out */
-    $out = $resultado[0];
-
-    $retornoArray = simpleXmlElementToArrayComNamespace($out);
-
-    // Log::info('--- XML bruto de <out> ---');
-    // Log::info($out->asXML());
-
-    // Log::info('--- Array convertido de <out> --- ' . json_encode($retornoArray, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
-
-    return $retornoArray;
-}
 
     public function consultaUnidadeSiapeXml(string $unidadecodigoSiape): SimpleXMLElement
     {
@@ -673,7 +810,7 @@ class UnidadeService extends ServiceBase
 
     }
 
-   
+
     public function processarUnidadesTemporarias(): void
     {
         $dataLimite = Carbon::now()->subDays(30);
@@ -689,27 +826,27 @@ class UnidadeService extends ServiceBase
         }
 
         $idsInativadas = [];
-        
+
         foreach ($unidadesParaInativar as $unidade) {
             $unidade->data_inativacao = Carbon::now();
             $unidade->save();
-            
+
             $idsInativadas[] = $unidade->id;
-            
+
             $usuariosVinculados = UnidadeIntegrante::where('unidade_id', $unidade->id)
                 ->whereNull('deleted_at')
                 ->get();
-            
+
             foreach ($usuariosVinculados as $integranteUnidade) {
-                $this->LimparAtribuicoes($integranteUnidade, true); 
-                
+                $this->LimparAtribuicoes($integranteUnidade, true);
+
                 Log::info("Atribuições removidas do usuário vinculado à unidade inativada", [
                     'usuario_id' => $integranteUnidade->usuario_id,
                     'unidade_id' => $unidade->id,
                     'unidade_integrante_id' => $integranteUnidade->id
                 ]);
             }
-            
+
             Log::info("Unidade inativada após 30 dias do início da inativação", [
                 'unidade_id' => $unidade->id,
                 'nome' => $unidade->nome,
@@ -725,5 +862,36 @@ class UnidadeService extends ServiceBase
             'total_inativadas' => count($idsInativadas),
             'ids' => $idsInativadas
         ]);
+    }
+
+    public function ativarTemporariamente($data)
+    {
+        $unidade = Unidade::find($data['unidade_id']);
+
+        if (empty($unidade)) {
+            throw new ValidateException("Unidade não encontrada", 422);
+        }
+
+        $unidade->justificativa_ativacao_temporaria = $data['justificativa'];
+        $unidade->data_ativacao_temporaria = Carbon::now();
+        $unidade->data_inicio_inativacao = Carbon::now();
+        $unidade->data_inativacao = null;
+        $unidade->save();
+
+        return $unidade;
+    }
+    public function isUnidadeExecutora($unidadeId): bool
+    {
+        return Unidade::where('id', $unidadeId)
+            ->where('executora', true)
+            ->exists();
+    }
+
+    public function isIntegrante($unidadeId, $usuarioId)
+    {
+        $unidadeIntegrante = UnidadeIntegrante::where("unidade_id", $unidadeId)->where("usuario_id", $usuarioId)->first();
+        if (empty($unidadeIntegrante)) return false;
+        $usuario = $unidadeIntegrante->usuario;
+        return $usuario ? true : false;
     }
 }

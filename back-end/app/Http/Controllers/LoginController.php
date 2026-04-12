@@ -9,10 +9,8 @@ use App\Services\FirebaseAuthService;
 use App\Services\GoogleService;
 use App\Services\IntegracaoService;
 use App\Services\ApiService;
+use App\Services\LoginService;
 use App\Models\Usuario;
-use App\Models\UnidadeIntegrante;
-use App\Models\Entidade;
-use App\Models\Tenant;
 use App\Models\Unidade;
 use App\Services\UnidadeService;
 use App\Services\CalendarioService;
@@ -24,59 +22,24 @@ use Illuminate\Support\Facades\Log;
 
 class LoginController extends Controller
 {
+    public function __construct(protected LoginService $loginService)
+    {
+    }
+
     private function registrarEntidade($request, $session = false)
     {
-        $with = ["feriados", "gestor", "gestorSubstituto"];
-        $entidadeId = $session ? $request->session()->get('entidade_id') : null;
-        $entidade   = $entidadeId ? Entidade::with($with)->find($entidadeId) : null;
-
-        $sigla = $request->has('entidade') ? $request->input('entidade') : ($request->headers->has("X-Entidade") ? $request->headers->get("X-Entidade") : config("petrvs")["entidade"]);
-        if (empty($entidade) && !empty($sigla)) {
-            $entidade = Entidade::with($with)->where("sigla", $sigla)->first();
-            Log::alert("entidade ::" . $sigla, [is_null($entidade)]);
-            $request->session()->put("entidade_id", $entidade->id);
-        }
-        return $entidade;
+        return $this->loginService->registrarEntidade($request, (bool) $session);
     }
 
     private function registrarUsuario($request, $usuario, $update = null)
     {
-        if (isset($usuario)) {          
-            if (isset($update) && count($update) > 0) {
-                $usuario->update($update);
-                $usuario->fresh();
-            }
-            $entidadeId = $request->session()->has("entidade_id") ? $request->session()->get("entidade_id") : null;
-            $usuario = Usuario::where("id", $usuario->id)->with([
-                "areasTrabalho" => function ($query) use ($entidadeId) {
-                    $query->with(["unidade.gestor.usuario", "unidade.gestoresSubstitutos.usuario", "unidade.gestoresDelegados.usuario", "unidade.cidade", "unidade.planosEntrega", "unidade.unidadePai.planosEntrega", "atribuicoes"])->whereHas('unidade', function ($query) use ($entidadeId) {
-                        return  $query->where('entidade_id', '=', $entidadeId);
-                    });
-                },
-                "participacoesProgramas" => function ($query) {
-                    $query->where("habilitado", 1);
-                },
-                "perfil.capacidades:id,perfil_id,tipo_capacidade_id",
-                "perfil.capacidades.tipoCapacidade:id,codigo",
-                "gerenciaTitular.atribuicoes",
-                "gerenciaTitular.unidade",
-                "gerenciasSubstitutas.atribuicoes",
-                "gerenciasSubstitutas.unidade",
-                "gerenciasDelegadas.atribuicoes",
-                "gerenciasDelegadas.unidade",
-                "notificacoesDestinatario" => function ($query) {
-                    $query->where('data_leitura', null);
-                }
-            ])->first();
-            $request->session()->put("unidade_id", $usuario->lotacao?->id);
-        }
-        return $usuario;
+        return $this->loginService->registrarUsuario($request, $usuario, $update);
     }
 
     /**
      * Retorna o usuário logado
      *
-     * @return App\Models\Usuario | null
+     * @return \App\Models\Usuario | null
      */
     public static function loggedUser(): ?Usuario
     {
@@ -97,7 +60,7 @@ class LoginController extends Controller
      * Seleciona Unidade Atual
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\Response
      */
     public function selecionaUnidade(Request $request, FirebaseAuthService $auth)
     {
@@ -156,14 +119,14 @@ class LoginController extends Controller
      * Obtem horário da unidade atual do usuário logado (considerando UTC pelo código IBGE)
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\Response
      */
     public function horarioUnidade(Request $request)
     {
         if (Auth::check()) {
             $unidade_id = $request->session()->get("unidade_id");
             if (!empty($unidade_id)) {
-                $unidadeService = new UnidadeService();
+                $unidadeService = app(UnidadeService::class);
                 return response()->json([
                     "status" => "OK",
                     "hora" => $unidadeService->hora($unidade_id)
@@ -180,7 +143,7 @@ class LoginController extends Controller
      * Logout
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\Response
      */
     public function logout(Request $request, FirebaseAuthService $auth)
     {
@@ -207,7 +170,7 @@ class LoginController extends Controller
      * Handle an authentication attempt.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\Response
      */
     public function authenticateSession(Request $request)
     {
@@ -256,7 +219,7 @@ class LoginController extends Controller
      * Handle an authentication attempt.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\Response
      */
     public function authenticateUserPassword(Request $request, FirebaseAuthService $auth)
     {
@@ -286,7 +249,7 @@ class LoginController extends Controller
      * Handle an authentication attempt.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\Response
      */
     public function authenticateFirebaseToken(Request $request, FirebaseAuthService $auth)
     {
@@ -301,7 +264,7 @@ class LoginController extends Controller
             if ($usuario === null) {
                 return response()->json(['error' => 'Usuário inativo no SIAPE. Acesso negado.'], 401);
             }
-            if (isset($usuario) && Auth::loginUsingId($usuario->id)) {
+            if (Auth::loginUsingId($usuario->id)) {
                 $usuarioService = new UsuarioService();
                 $usuarioService->atualizarFotoPerfil(UsuarioService::LOGIN_FIREBASE, $usuario, $tokenData["picture"]);
                 $request->session()->regenerate();
@@ -321,7 +284,7 @@ class LoginController extends Controller
      * Handle an authentication attempt.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\Response
      */
     public function authenticateGoogleToken(Request $request, GoogleService $auth)
     {
@@ -336,7 +299,7 @@ class LoginController extends Controller
             if ($usuario === null) {
                 return response()->json(['error' => 'Usuário inativo no SIAPE. Acesso negado.'], 401);
             }
-            if (isset($usuario) && Auth::loginUsingId($usuario->id)) {
+            if (Auth::loginUsingId($usuario->id)) {
                 $usuarioService = new UsuarioService();
                 $usuarioService->atualizarFotoPerfil(UsuarioService::LOGIN_GOOGLE, $usuario, $tokenData["picture"]);
                 $request->session()->regenerate();
@@ -352,13 +315,13 @@ class LoginController extends Controller
         return LogError::newError('As credenciais fornecidas são inválidas.', new Exception("authenticateGoogleToken"), $tokenData);
     }
 
-    
-    
+
+
     /**
      * Handle an authentication attempt.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function authenticateApiSession(Request $request)
     {
@@ -381,7 +344,7 @@ class LoginController extends Controller
      * Handle an authentication attempt.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function authenticateApiUserPassword(Request $request, FirebaseAuthService $auth)
     {
@@ -411,7 +374,7 @@ class LoginController extends Controller
      * Handle an authentication attempt.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function authenticateApiFirebaseToken(Request $request, FirebaseAuthService $auth)
     {
@@ -444,7 +407,7 @@ class LoginController extends Controller
      * Handle an authentication attempt.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function authenticateApiGoogleToken(Request $request, GoogleService $auth)
     {
@@ -474,10 +437,10 @@ class LoginController extends Controller
         return LogError::newError('As credenciais fornecidas são inválidas.', new Exception("authenticateApiGoogleToken"), $tokenData);
     }
 
-    
 
-    
-    
+
+
+
     /**
      * Verify an firebase token
      *
@@ -493,7 +456,7 @@ class LoginController extends Controller
      * Verify an Sactum token
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\Response
      */
     public function validateApiToken(Request $request)
     {
@@ -590,7 +553,7 @@ class LoginController extends Controller
         return Socialite::driver('govbr');
     }
 
-    function getConfigGovBr($url_dinamica_callback = null, $dados): \SocialiteProviders\Manager\Config
+    function getConfigGovBr($url_dinamica_callback, $dados): \SocialiteProviders\Manager\Config
     {
         return new \SocialiteProviders\Manager\Config(
             config("services.govbr.client_id"),
@@ -635,7 +598,7 @@ class LoginController extends Controller
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            return redirect()->route('erro.500'); 
+            return redirect()->route('erro.500');
         }
     }
 

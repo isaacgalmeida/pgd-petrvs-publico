@@ -18,13 +18,11 @@ class CapacidadeSeeder extends Seeder
    */
 
   public $timenow;
-  public $utilService;
   public $nivelAcessoService;
 
   public function __construct()
   {
     $this->timenow = now();
-    $this->utilService = new UtilService();
     $this->nivelAcessoService = new NivelAcessoService();
   }
 
@@ -91,8 +89,8 @@ class CapacidadeSeeder extends Seeder
     $capacidades_chefia_de_unidade_executora = [
       ["codigo" => "CTXT_GEST"],
       ["codigo" => "MENU_GESTAO_ACESSO"],
+      ["codigo" => "MENU_CONFIG_ACESSO"],
       ["codigo" => "ACESSO"],
-      ["codigo" => "MOD_CFG_ENTD"],
       ["codigo" => "MOD_AFT"],
       ["codigo" => "MOD_AFT_EDT"],
       ["codigo" => "MOD_AFT_EXCL"],
@@ -114,7 +112,7 @@ class CapacidadeSeeder extends Seeder
       ["codigo" => "MOD_CADV_EDT"],
       ["codigo" => "MOD_CADV_EXCL"],
       ["codigo" => "MOD_CADV_INCL"],
-      ["codigo" => "MOD_CFG_UND"],
+      ["codigo" => "MOD_CFG"],
       ["codigo" => "MOD_CFG_USER"],
       ["codigo" => "MOD_CLI"],
       ["codigo" => "MOD_ENTD"],
@@ -123,6 +121,11 @@ class CapacidadeSeeder extends Seeder
       ["codigo" => "MOD_EXTM_EXCL"],
       ["codigo" => "MOD_EXTM_INCL"],
       ["codigo" => "MOD_CTXT"],
+      ["codigo" => "MOD_INDICADORES"],
+      ["codigo" => "MOD_IND_ENTREGAS"],
+      ["codigo" => "MOD_IND_EQUIPES"],
+      ["codigo" => "MOD_IND_GESTAO"],
+      ["codigo" => "MOD_IND_VINCULADAS"],
       ["codigo" => "MOD_PART"],
       ["codigo" => "MOD_PRGT_INCL"],
       ["codigo" => "MOD_PART_HAB"],
@@ -133,6 +136,7 @@ class CapacidadeSeeder extends Seeder
       ["codigo" => "MOD_PENT_AVAL_SUBORD"],
       ["codigo" => "MOD_PENT_CANC_AVAL"],
       ["codigo" => "MOD_PENT_CANC_HOMOL"],
+      ["codigo" => "MOD_PENT_CNC"],
       ["codigo" => "MOD_PENT_CONC"],
       ["codigo" => "MOD_PENT_EDT"],
       ["codigo" => "MOD_PENT_EDT_ATV_ATV"],
@@ -194,13 +198,12 @@ class CapacidadeSeeder extends Seeder
       ["codigo" => "MOD_TRF_EDT"],
       ["codigo" => "MOD_TRF_EXCL"],
       ["codigo" => "MOD_TRF_INCL"],
-      ["codigo" => "MOD_UND"],
       ["codigo" => "MOD_UND_EDT"],
       ["codigo" => "MOD_UND_INCL"],
-      ["codigo" => "MOD_UND_TUDO"],
       ["codigo" => "MOD_USER"],
       ["codigo" => "MOD_USER_TUDO"],
       ["codigo" => "MOD_USER_EDT"],
+      ["codigo" => "MOD_USER_ATRIB"],
       ["codigo" => "MOD_PROD"],
       ["codigo" => "MOD_PROD_INCL"],
       ["codigo" => "MOD_PROD_EDT"],
@@ -252,6 +255,11 @@ class CapacidadeSeeder extends Seeder
       ["codigo" => "MOD_EXTM_EDT"],
       ["codigo" => "MOD_EXTM_EXCL"],
       ["codigo" => "MOD_EXTM_INCL"],
+      ["codigo" => "MOD_INDICADORES"],
+      ["codigo" => "MOD_IND_ENTREGAS"],
+      ["codigo" => "MOD_IND_EQUIPES"],
+      ["codigo" => "MOD_IND_GESTAO"],
+      ["codigo" => "MOD_IND_VINCULADAS"],
       ["codigo" => "MOD_PART"],
       ["codigo" => "MOD_PART_DESAB"],
       ["codigo" => "MOD_PART_HAB"],
@@ -315,13 +323,16 @@ class CapacidadeSeeder extends Seeder
       ["codigo" => "MOD_PTR_ENTR_EXCL"],
       ["codigo" => "MOD_PTR_ENTR_INCL"],
       ["codigo" => "MOD_PTR_INCL"],
-      ["codigo" => "MOD_PTR_INTSC_DATA"],
       ["codigo" => "MOD_PTR_USERS_INCL"],
       ["codigo" => "MOD_RELATORIOS"],
       ["codigo" => "MOD_RELATORIO_USUARIO"],
       ["codigo" => "MOD_RELATORIO_UNIDADE"],
       ["codigo" => "MOD_RELATORIO_PT"],
+      ["codigo" => "MOD_RELATORIO_PT_UNIDADES_VINCULADAS"],
       ["codigo" => "MOD_RELATORIO_PE"],
+      ["codigo" => "MOD_RELATORIO_PE_UNIDADES_VINCULADAS"],
+      ["codigo" => "MOD_RELATORIO_USUARIO_UNIDADES_VINCULADAS"],
+      ["codigo" => "MOD_RELATORIO_UNIDADE_UNIDADES_VINCULADAS"],
       ["codigo" => "MOD_TEMP"],
       ["codigo" => "MOD_TEMP_INCL"],
       ["codigo" => "MOD_TEMP_EDT"],
@@ -346,12 +357,13 @@ class CapacidadeSeeder extends Seeder
       ["codigo" => "MOD_UND_INTG_INCL"],
       ["codigo" => "MOD_UND_TUDO"],
       ["codigo" => "MOD_USER"],
-      ["codigo" => "MOD_USER_ATRIB"],
       ["codigo" => "MOD_USER_EDT"],
       ["codigo" => "MOD_USER_EXCL"],
       ["codigo" => "MOD_USER_INCL"],
       ["codigo" => "MOD_USER_REATIVAR"],
+      ["codigo" => "MOD_USER_LIST_ALL"],
       ["codigo" => "MOD_USER_TUDO"],
+      ["codigo" => "MOD_USER_ATRIB"],
       ["codigo" => "MOD_CFG_USER_PERFIL"],
       ["codigo" => "MOD_PROD"],
       ["codigo" => "MOD_PROD_INCL"],
@@ -383,6 +395,7 @@ class CapacidadeSeeder extends Seeder
       ["codigo" => "MOD_FER_EXCL"],
       ["codigo" => "MOD_FER_INCL"],
       ["codigo" => "MOD_PRGT_EXT"],
+      ["codigo" => "MOD_PRGT_VER_TODOS"],
       ["codigo" => "MOD_TIPO_TRF"],
       ["codigo" => "MOD_TIPO_TRF_EDT"],
       ["codigo" => "MOD_TIPO_TRF_EXCL"],
@@ -395,6 +408,7 @@ class CapacidadeSeeder extends Seeder
       ["codigo" => "MOD_RELATORIO_PE_TODAS_UNIDADES"],
       ["codigo" => "MOD_RELATORIO_USUARIO_TODAS_UNIDADES"],
       ["codigo" => "MOD_RELATORIO_UNIDADE_TODAS_UNIDADES"],
+      ["codigo" => "MOD_IND_TODAS_UNIDADES"],
       ["codigo" => "MOD_UND_INST"],
       ["codigo" => "MOD_PART_PEDAGIO"],
       ["codigo" => "MOD_AUDIT_LOG"],
@@ -408,7 +422,32 @@ class CapacidadeSeeder extends Seeder
     );
     // retirar algumas capacidades do colaborador
     $capacidades_colaborador = array_filter($capacidades_colaborador, function ($c) {
-      return !in_array($c['codigo'], ["MOD_CADV_EDT", "MOD_CADV_EXCL", "MOD_CADV_INCL",  "MOD_EXTM_EDT", "MOD_EXTM_EXCL", "MOD_EXTM_INCL", "MOD_PENT_QQR_UND", "MOD_PLAN_INST_EDT", "MOD_PLAN_INST_EXCL", "MOD_PLAN_INST_INCL", "MOD_PRGT_CONCL", "MOD_PRGT_EDT", "MOD_PRGT_EXCL", "MOD_UND_INATV", "MOD_UND_INTG", "MOD_UND_INTG_EDT", "MOD_UND_INTG_EXCL", "MOD_UND_INTG_GST", "MOD_UND_INTG_INCL", "MOD_UND_INST"]);
+        return !in_array($c['codigo'], [
+            "MOD_CADV_EDT",
+            "MOD_CADV_EXCL",
+            "MOD_CADV_INCL",
+            "MOD_EXTM_EDT",
+            "MOD_EXTM_EXCL",
+            "MOD_EXTM_INCL",
+            "MOD_PENT_QQR_UND",
+            "MOD_PLAN_INST_EDT",
+            "MOD_PLAN_INST_EXCL",
+            "MOD_PLAN_INST_INCL",
+            "MOD_PRGT_CONCL",
+            "MOD_PRGT_EDT",
+            "MOD_PRGT_EXCL",
+            "MOD_RELATORIO_PT_UNIDADES_VINCULADAS",
+            "MOD_RELATORIO_PE_UNIDADES_VINCULADAS",
+            "MOD_RELATORIO_USUARIO_UNIDADES_VINCULADAS",
+            "MOD_RELATORIO_UNIDADE_UNIDADES_VINCULADAS",
+            "MOD_UND_INATV",
+            "MOD_UND_INTG",
+            "MOD_UND_INTG_EDT",
+            "MOD_UND_INTG_EXCL",
+            "MOD_UND_INTG_GST",
+            "MOD_UND_INTG_INCL",
+            "MOD_UND_INST"
+        ]);
     });
 
     // Inserção de dados
@@ -428,12 +467,12 @@ class CapacidadeSeeder extends Seeder
 
     foreach ($capacidades_consulta as $c) {
       $capacidade = [
-        "id" => $this->utilService->uuid("Consulta" . $c['codigo']),
+        "id" => UtilService::uuid("Consulta" . $c['codigo']),
         "created_at" => $this->timenow,
         "updated_at" => $this->timenow,
         "deleted_at" => NULL,
         "perfil_id" => $consultaId,
-        "tipo_capacidade_id" => $this->utilService->uuid($c['codigo']),
+        "tipo_capacidade_id" => UtilService::uuid($c['codigo']),
       ];
 
       $queryCapacidade = Capacidade::onlyTrashed()->find($capacidade['id']);
@@ -456,12 +495,12 @@ class CapacidadeSeeder extends Seeder
 
     foreach ($capacidades_participante as $c) {
       $capacidade = [
-        "id" => $this->utilService->uuid("Participante" . $c['codigo']),
+        "id" => UtilService::uuid("Participante" . $c['codigo']),
         "created_at" => $this->timenow,
         "updated_at" => $this->timenow,
         "deleted_at" => NULL,
         "perfil_id" => $participanteId,
-        "tipo_capacidade_id" => $this->utilService->uuid($c['codigo']),
+        "tipo_capacidade_id" => UtilService::uuid($c['codigo']),
       ];
 
       $queryCapacidade = Capacidade::onlyTrashed()->find($capacidade['id']);
@@ -484,12 +523,12 @@ class CapacidadeSeeder extends Seeder
 
     foreach ($capacidades_chefia_de_unidade_executora as $c) {
       $capacidade = [
-        "id" => $this->utilService->uuid("Chefia de Unidade Executora" . $c['codigo']),
+        "id" => UtilService::uuid("Chefia de Unidade Executora" . $c['codigo']),
         "created_at" => $this->timenow,
         "updated_at" => $this->timenow,
         "deleted_at" => NULL,
         "perfil_id" => $chefeId,
-        "tipo_capacidade_id" => $this->utilService->uuid($c['codigo']),
+        "tipo_capacidade_id" => UtilService::uuid($c['codigo']),
       ];
       $queryCapacidade = Capacidade::onlyTrashed()->find($capacidade['id']);
       $queryTipoCapacidade = TipoCapacidade::find($capacidade['tipo_capacidade_id']);
@@ -509,12 +548,12 @@ class CapacidadeSeeder extends Seeder
 
     foreach ($capacidades_administrador_negocial as $c) {
       $capacidade = [
-        "id" => $this->utilService->uuid("Administrador Negocial Novo" . $c['codigo']),
+        "id" => UtilService::uuid("Administrador Negocial Novo" . $c['codigo']),
         "created_at" => $this->timenow,
         "updated_at" => $this->timenow,
         "deleted_at" => NULL,
         "perfil_id" => $admId,
-        "tipo_capacidade_id" => $this->utilService->uuid($c['codigo']),
+        "tipo_capacidade_id" => UtilService::uuid($c['codigo']),
       ];
 
       $queryCapacidade = Capacidade::onlyTrashed()->find($capacidade['id']);
@@ -535,12 +574,12 @@ class CapacidadeSeeder extends Seeder
 
     foreach ($capacidades_administrador_geral as $c) {
       $capacidade = [
-        "id" => $this->utilService->uuid("Administrador Geral" . $c['codigo']),
+        "id" => UtilService::uuid("Administrador Geral" . $c['codigo']),
         "created_at" => $this->timenow,
         "updated_at" => $this->timenow,
         "deleted_at" => NULL,
         "perfil_id" => $admGeralId,
-        "tipo_capacidade_id" => $this->utilService->uuid($c['codigo']),
+        "tipo_capacidade_id" => UtilService::uuid($c['codigo']),
       ];
 
       $queryCapacidade = Capacidade::onlyTrashed()->find($capacidade['id']);
@@ -561,12 +600,12 @@ class CapacidadeSeeder extends Seeder
 
     foreach ($capacidades_colaborador as $c) {
       $capacidade = [
-        "id" => $this->utilService->uuid("Colaborador" . $c['codigo']),
+        "id" => UtilService::uuid("Colaborador" . $c['codigo']),
         "created_at" => $this->timenow,
         "updated_at" => $this->timenow,
         "deleted_at" => NULL,
         "perfil_id" => $colaboradorId,
-        "tipo_capacidade_id" => $this->utilService->uuid($c['codigo']),
+        "tipo_capacidade_id" => UtilService::uuid($c['codigo']),
       ];
 
       $queryCapacidade = Capacidade::onlyTrashed()->find($capacidade['id']);

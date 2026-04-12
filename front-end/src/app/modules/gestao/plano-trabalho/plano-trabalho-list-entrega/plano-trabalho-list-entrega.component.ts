@@ -2,7 +2,7 @@ import { ChangeDetectorRef, Component, EventEmitter, Injector, Input, Output, Vi
 import { AbstractControl, FormGroup } from '@angular/forms';
 import { EditableFormComponent } from 'src/app/components/editable-form/editable-form.component';
 import { GridComponent } from 'src/app/components/grid/grid.component';
-import { ToolbarButton } from 'src/app/components/toolbar/toolbar.component';
+import { ToolbarButton } from 'src/app/components/toolbar/toolbar-types';
 import { PageFrameBase } from 'src/app/modules/base/page-frame-base';
 import { PlanoTrabalho } from 'src/app/models/plano-trabalho.model';
 import { PlanoTrabalhoEntrega } from 'src/app/models/plano-trabalho-entrega.model';
@@ -20,9 +20,10 @@ import { PlanoEntregaEntrega } from 'src/app/models/plano-entrega-entrega.model'
 import { UnidadeService } from 'src/app/services/unidade.service';
 
 @Component({
-  selector: 'plano-trabalho-list-entrega',
-  templateUrl: './plano-trabalho-list-entrega.component.html',
-  styleUrls: ['./plano-trabalho-list-entrega.component.scss']
+    selector: 'plano-trabalho-list-entrega',
+    templateUrl: './plano-trabalho-list-entrega.component.html',
+    styleUrls: ['./plano-trabalho-list-entrega.component.scss'],
+    standalone: false
 })
 export class PlanoTrabalhoListEntregaComponent extends PageFrameBase {
   @ViewChild(EditableFormComponent, { static: false }) public editableForm?: EditableFormComponent;
@@ -88,10 +89,10 @@ export class PlanoTrabalhoListEntregaComponent extends PageFrameBase {
     if (['forca_trabalho'].indexOf(controlName) >= 0 && control.value == 1) return result;
     if (['forca_trabalho'].indexOf(controlName) >= 0 && !control.value) result = "Obrigatório!";
     if (['descricao'].indexOf(controlName) >= 0 && !control.value?.length) result = "Obrigatório!";
-    if (['forca_trabalho'].indexOf(controlName) >= 0 && (control.value < 1 || control.value > 100)) result = "Deve estar entre 1 e 100";
+    if (['forca_trabalho'].indexOf(controlName) >= 0 && (control.value < 1)) result = "Deve ser maior que 0 ";
     if (['plano_entrega_entrega_id'].indexOf(controlName) >= 0) {
       if (['PROPRIA_UNIDADE', 'OUTRA_UNIDADE'].includes(this.form?.controls.origem.value) && !control.value) result = "Obrigatório!";
-      if (!!this.entity?.entregas?.filter(e => !!e.plano_entrega_entrega_id && e.id != this.grid?.editing?.id).find(x => x.plano_entrega_entrega_id == control.value)) result = "Esta entrega está em duplicidade!"; /* (*2) */
+      if (!!this.entity?.entregas?.filter(e => !!e.plano_entrega_entrega_id && e.id != this.grid?.editing?.id && e._status != "DELETE").find(x => x.plano_entrega_entrega_id == control.value)) result = "Esta entrega está em duplicidade!"; /* (*2) */
     }
     return result;
   }
@@ -239,7 +240,7 @@ export class PlanoTrabalhoListEntregaComponent extends PageFrameBase {
    * @returns 
    */
   public somaForcaTrabalho(entregas: PlanoTrabalhoEntrega[] = []): number {
-    return entregas.map(x => x.forca_trabalho * 1).reduce((a, b) => a + b, 0);
+    return entregas.filter(x => x._status != "DELETE").map(x => x.forca_trabalho * 1).reduce((a, b) => a + b, 0);
   }
 
   /**

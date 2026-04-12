@@ -37,8 +37,14 @@ return [
     'channels' => [
         'stack' => [
             'driver' => 'stack',
-            'channels' => ['single'],
+            'channels' => ['tenant_custom'],
             'ignore_exceptions' => false,
+        ],
+
+        'tenant_custom' => [
+            'driver' => 'custom',
+            'via' => \App\Logging\TenantCustomLogger::class,
+            'level' => env('LOG_LEVEL', 'debug'),
         ],
 
         'single' => [
@@ -112,10 +118,8 @@ return [
             'via' => App\Logging\DatabaseLogger::class
         ],
         'siape' => [
-            'driver' => 'single',
-            'path' => storage_path('logs/siape.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
-            'days' => 3,
+            'driver' => 'custom',
+            'via' => App\Logging\SiapeLogger::class,
         ],
     ],
 

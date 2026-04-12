@@ -19,6 +19,8 @@ class SiapeIndividualService extends ServiceBase
     private BuscarDadosSiapeServidores $buscarDadosSiapeServidores;
     private BuscarDadosSiapeUnidades $buscarDadosSiapeUnidades;
 
+    public SiapeIndividualServidorService $SiapeIndividualServidorService;
+    public SiapeIndividualUnidadeService $SiapeIndividualUnidadeService;
 
     public mixed $config;
 
@@ -50,21 +52,27 @@ class SiapeIndividualService extends ServiceBase
         $this->buscarDadosSiapeServidores = new BuscarDadosSiapeServidores($this->config);
         $this->buscarDadosSiapeUnidades = new BuscarDadosSiapeUnidades($this->config);
         $this->processaDadosSiape = new ProcessaDadosSiapeBD();
+        $this->SiapeIndividualServidorService = app(SiapeIndividualServidorService::class);
+        $this->SiapeIndividualUnidadeService = app(SiapeIndividualUnidadeService::class);
     }
 
     private function limpaLogSiape(string $cpf)
     {
-        $logPath = storage_path('logs/siape.log');
+        $tenantId = function_exists('tenant') ? (tenant('id') ?? 'central') : 'central';
+        $logPath = storage_path('logs/siape_' . $tenantId . '.log');
 
         if (File::exists($logPath)) {
             File::put($logPath, '');
+        } else {
+            File::put($logPath, '');
+            @chmod($logPath, 0777);
         }
 
 
     }
 
 
-    private function getOrgao() {
+    public function getOrgao() {
         return strval(intval($this->config['codOrgao']));
     }
 

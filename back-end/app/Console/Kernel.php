@@ -18,6 +18,10 @@ class Kernel extends ConsoleKernel
         \App\Console\Commands\InativaUsuarioSiape::class,
         \App\Console\Commands\InativaUnidadesSiape::class,
         \App\Console\Commands\InativaUnidadesTemporarios::class,
+        \App\Console\Commands\SlowLogCheck::class,
+        \App\Console\Commands\NotifySlowQuery::class,
+        \App\Console\Commands\SlowLogWatch::class,
+        \App\Console\Commands\SlowLogPrune::class,
     ];
 
     protected function commands()
@@ -34,6 +38,7 @@ class Kernel extends ConsoleKernel
         $schedule->call(function () {
             $tenants = \App\Models\Tenant::all();
             foreach ($tenants as $tenant) {
+                /** @var \App\Models\Tenant $tenant */
                 \App\Jobs\InativacaoUsuariosTemporarios::dispatch($tenant->id);
             }
         })->dailyAt('03:00')->name('Inativação Usuários Temporários');
@@ -41,6 +46,7 @@ class Kernel extends ConsoleKernel
         $schedule->call(function () {
             $tenants = \App\Models\Tenant::all();
             foreach ($tenants as $tenant) {
+                /** @var \App\Models\Tenant $tenant */
                 \App\Jobs\InativacaoUnidadesSiape::dispatch($tenant->id);
             }
         })->dailyAt('00:15')->name('Inativação Unidades SIAPE');
@@ -49,12 +55,14 @@ class Kernel extends ConsoleKernel
         $schedule->call(function () {
             $tenants = \App\Models\Tenant::all();
             foreach ($tenants as $tenant) {
+                /** @var \App\Models\Tenant $tenant */
                 \App\Jobs\InativacaoUnidadesTemporarios::dispatch($tenant->id);
             }
         })->dailyAt('00:30')->name('Inativação Unidades Temporários');
         
         $agendamentosPrincipal = JobSchedule::where('ativo', true)->get();
         foreach ($agendamentosPrincipal as $jobEntity) {
+            /** @var JobSchedule $jobEntity */
             $job = JobWithoutTenant::getJob($jobEntity->classe);
 
             if (!$job instanceof JobWithoutTenant) {
@@ -67,5 +75,12 @@ class Kernel extends ConsoleKernel
         }
 
         $schedule->command('horizon:snapshot')->everyFiveMinutes();
+
+        $schedule->command('planos:arquivar-avaliados --days=90')->dailyAt('04:00')->name('Arquivar Planos Avaliados (PTs e PEs)');
+
+        $schedule->command('db:slow-log:prune-old')->dailyAt('04:00');
+        $schedule->command('db:slow-log:ensure-daily --perm=777')->dailyAt('00:01');
+        
+        $schedule->command('logs:cleanup')->dailyAt('00:01');
     }
 }

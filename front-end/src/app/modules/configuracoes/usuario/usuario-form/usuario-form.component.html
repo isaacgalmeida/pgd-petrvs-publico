@@ -7,7 +7,7 @@
                 </div>
                 <div class="form-group col-md-9">
                     <div class="row">
-                        <input-text [disabled]="!entity?.usuario_externo ? 'true' : undefined" [size]="3" label="CPF" controlName="cpf" [maskFormat]="'000.000.000-00'" [attr.maxlength]=15 required></input-text>
+                        <input-text [disabled]="!entity?.usuario_externo ? 'true' : undefined" [size]="3" label="CPF" controlName="cpf"  [attr.maxlength]=11 required></input-text>
                         <input-text [disabled]="!entity?.usuario_externo ? 'true' : undefined" [size]="6" label="E-mail" controlName="email" textCase="lower" [attr.maxlength]=250 required></input-text>
                         <input-datetime date [size]="3" label="Nascimento" noIcon controlName="data_nascimento" [labelInfo]="'Data de nascimento'" [disabled]="!entity?.usuario_externo ? 'true' : undefined"></input-datetime>
                     </div>
@@ -21,6 +21,51 @@
                 </div>
             </div>
         </tab>
+        <tab key="SITUACAO" label="Situação" *ngIf="!isNew">
+            <div class="row">
+                <div class="col-md-12">
+                    <top-alert *ngIf="!entity?.unidades_vinculadas?.length" type="warning" [message]="'Nenhum unidade vinculada ao usuário'"></top-alert>
+                    <grid #unidades_vinculadas [items]="entity?.unidades_vinculadas || []" minHeight="auto" noMargin>
+                        <columns>
+                            <column [title]="lex.translate('Nº Matrícula')" [template]="columnMatricula">
+                                <ng-template let-row="row" #columnMatricula>
+                                    <span>{{ row.matricula || 'Não definida' }} </span>
+                                </ng-template>
+                            </column>
+                            <column [title]="lex.translate('Unidade')" [template]="columnUnidade">
+                                <ng-template let-row="row" #columnUnidade>
+                                    <span>{{ row.sigla || '(Não definida)' }} </span>
+                                </ng-template>
+                            </column>
+                            <column [title]="lex.translate('Situação Funcional')" [template]="columnSituacao">
+                                <ng-template let-row="row" #columnSituacao>
+                                    <span>{{ lookup.getValue(lookup.USUARIO_SITUACAO_FUNCIONAL, row.situacao_funcional) }} </span>
+                                </ng-template>
+                            </column>
+                        </columns>
+                    </grid>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-12">
+                    <top-alert *ngIf="!entity?.regramentos" type="warning" [message]="'Nenhum regramento cadastrado para o usuário'"></top-alert>
+                    <grid #regramentos_grid [items]="regramentos" *ngIf="regramentos.length" minHeight="auto" noMargin>
+                        <columns>
+                            <column [title]="lex.translate('Regramentos')" [template]="columnRegramento">
+                                <ng-template let-row="row" #columnRegramento>
+                                    <span>{{ row.nome || '' }} </span>
+                                </ng-template>
+                            </column>
+                        </columns>
+                    </grid>
+                </div>
+            </div>
+            <div class="row">
+                <input-display [size]="3" label="Participante do PGD" [value]="entity?.participa_pgd?.toUpperCase()"></input-display>
+                <input-display [size]="6" label="Modalidade" [value]="entity?.tipo_modalidade_siape ? entity?.tipo_modalidade_siape?.nome?.toUpperCase() : 'Não definida'"></input-display>
+            </div>
+        </tab>
         <tab key="CONFIGURACOES" label="TCR- Particularidades do participante" *ngIf="entity?.id && !entity?.usuario_externo">
             <div class="row">
                 <input-editor [label]="''" controlName="texto_complementar_plano" [dataset]="planoDataset"></input-editor>
@@ -30,10 +75,10 @@
             <document-preview *ngIf="entity?.ultimo_plano_trabalho_ativo" [html]="entity?.ultimo_plano_trabalho_ativo?.documentos?.[0]?.conteudo || ''" emptysDocumentMensage="Vazio"></document-preview>
         </tab>
         <tab key="ATRIBUICOES" [label]="lex.translate('Atribuições')">
-            <usuario-integrante #unidadesIntegrantes noPersist [entity]="entity"></usuario-integrante>
+            <usuario-integrante #unidadesIntegrantes noPersist [entity]="entity" [readOnly]="!canEditAtribuicoes"></usuario-integrante>
         </tab>
     </tabs>
 </editable-form>
-<small *ngIf="entity?.id && entity?.usuario_externo">
+<small *ngIf="entity?.id && entity?.usuario_externo && entity?.audits_externo">
     <span class="fs-6 text-danger">** Cadastro realizado por  {{ entity?.audits_externo[0]?.performed_by || 'carregando...' }}  em {{ entity?.audits_externo[0]?.created_at || 'carregando...' }}  </span>
 </small>

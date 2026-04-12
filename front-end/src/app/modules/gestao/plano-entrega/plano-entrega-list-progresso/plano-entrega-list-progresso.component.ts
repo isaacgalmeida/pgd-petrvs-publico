@@ -8,9 +8,10 @@ import { PlanoEntregaService } from "../plano-entrega.service";
 import { Base } from "src/app/models/base.model";
 
 @Component({
-  selector: 'app-plano-entrega-list-progresso',
-  templateUrl: './plano-entrega-list-progresso.component.html',
-  styleUrls: ['./plano-entrega-list-progresso.component.scss']
+    selector: 'app-plano-entrega-list-progresso',
+    templateUrl: './plano-entrega-list-progresso.component.html',
+    styleUrls: ['./plano-entrega-list-progresso.component.scss'],
+    standalone: false
 })
 export class PlanoEntregaListProgressoComponent extends PageListBase<PlanoEntregaEntregaProgresso,PlanoEntregaEntregaProgressoDaoService> {
   @ViewChild(GridComponent, { static: false }) public grid?: GridComponent;
@@ -21,7 +22,7 @@ export class PlanoEntregaListProgressoComponent extends PageListBase<PlanoEntreg
   constructor(public injector: Injector) {
     super(injector, PlanoEntregaEntregaProgresso, PlanoEntregaEntregaProgressoDaoService);
     this.planoEntregaService = injector.get<PlanoEntregaService>(PlanoEntregaService);
-    this.title = this.lex.translate("Histórico de execução");
+    this.title = this.lex.translate("Histórico de Execução");
     this.orderBy = [['data_progresso','desc']];
     this.join = ['plano_entrega_entrega.entrega'];
     this.filter = this.fh.FormBuilder({

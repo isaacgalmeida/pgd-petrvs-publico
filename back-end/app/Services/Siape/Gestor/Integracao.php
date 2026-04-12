@@ -4,17 +4,18 @@ namespace App\Services\Siape\Gestor;
 
 use App\Enums\Atribuicao as EnumsAtribuicao;
 use App\Exceptions\ServerException;
-use App\Models\Perfil;
-use App\Models\Unidade;
 use App\Models\Usuario;
+use App\Repository\UnidadeRepository;
+use App\Repository\UnidadeIntegranteRepository;
+use App\Repository\UnidadeIntegranteAtribuicaoRepository;
+use App\Repository\UsuarioRepository;
 use App\Services\LogTrait;
 use App\Services\NivelAcessoService;
 use App\Services\PerfilService;
 use App\Services\Siape\Contrato\InterfaceIntegracao;
 use App\Services\Siape\Unidade\Atribuicao;
-use App\Services\Tipo;
 use App\Services\UnidadeIntegranteService;
-use Illuminate\Support\Facades\Log;
+use App\Facades\SiapeLog;
 
 class Integracao implements InterfaceIntegracao
 {
@@ -26,7 +27,6 @@ class Integracao implements InterfaceIntegracao
     /**
      *
      * @param array{id_unidade: string, id_chefe: string, id_substituto: string}[] $dados
-     * @param Usuario $userModel
      * @param UnidadeIntegranteService $unidadeIntegranteService
      * @param NivelAcessoService $nivelAcessoService
      * @param PerfilService $perfilService
@@ -34,10 +34,13 @@ class Integracao implements InterfaceIntegracao
      */
     public function __construct(
         private array $dados,
-        private Usuario $userModel,
         private UnidadeIntegranteService $unidadeIntegranteService,
         private NivelAcessoService $nivelAcessoService,
         private PerfilService $perfilService,
+        private UnidadeRepository $unidadeRepository,
+        private UnidadeIntegranteRepository $unidadeIntegranteRepository,
+        private UnidadeIntegranteAtribuicaoRepository $unidadeIntegranteAtribuicaoRepository,
+        private UsuarioRepository $usuarioRepository,
         private mixed $config
     ) {
         $this->message['vazio'] = [];
@@ -45,15 +48,35 @@ class Integracao implements InterfaceIntegracao
         $this->message['sucesso'] = [];
     }
 
+    public function getUnidadeIntegranteRepository(): UnidadeIntegranteRepository
+    {
+        return $this->unidadeIntegranteRepository;
+    }
+
+    public function getUnidadeIntegranteAtribuicaoRepository(): UnidadeIntegranteAtribuicaoRepository
+    {
+        return $this->unidadeIntegranteAtribuicaoRepository;
+    }
+
+    public function getUsuarioRepository(): UsuarioRepository
+    {
+        return $this->usuarioRepository;
+    }
+
+    public function getUnidadeRepository(): UnidadeRepository
+    {
+        return $this->unidadeRepository;
+    }
+
     public function processar(): void
     {
         foreach ($this->dados as $dado) {
             try {
-                $this->logSiape("iniciando o processamento da chefia:", $dado);
+                SiapeLog::info("iniciando o processamento da chefia:", $dado);
                 $this->processaChefia($dado);
             } catch (\Exception $e) {
                 array_push($this->message['erro'], $dado['id_unidade']);
-                $this->logSiape($e->getMessage(), $dado, Tipo::ERROR);
+                SiapeLog::error($e->getMessage(), $dado);
                 continue;
             }
         }
@@ -63,23 +86,35 @@ class Integracao implements InterfaceIntegracao
     {
 
         if (empty($dado['id_chefe'])) {
-            $unidade = Unidade::find($dado['id_unidade']);
-            $this->removeAtualGestorDaUnidade($unidade);
+            //verificar se a unidade está inativa
+            $unidade = $this->unidadeRepository->findById($dado['id_unidade']);
+            if ($unidade) {
+                $this->removeAtualGestorDaUnidade($unidade);
+            }
             array_push($this->message['vazio'],  $dado['id_unidade']);
-            $this->logSiape("Chefe não informado para a unidade " . $dado['id_unidade'], $dado, Tipo::WARNING);
+            SiapeLog::warning("Chefe não informado para a unidade " . $dado['id_unidade'], $dado);
             return;
         }
-        $usuarioChefia = $this->userModel->find($dado['id_chefe']);
+        //verificar se o usuario está inativo
+        $usuarioChefia = $this->usuarioRepository->findById($dado['id_chefe']);
+
+        if (!$usuarioChefia) {
+             SiapeLog::error("Usuário chefe não encontrado: " . $dado['id_chefe'], $dado);
+             array_push($this->message['erro'], $dado['id_unidade']);
+             return;
+        }
+
         $atribuicoesAtuaisDaChefia = $usuarioChefia->getUnidadesAtribuicoesAttribute();
         $unidadeExercicioId = $dado['id_unidade'];
         $chefeAtribuicoes = $this->preparaChefia($atribuicoesAtuaisDaChefia, $unidadeExercicioId);
 
-        $this->logSiape(sprintf("atribuições do usuário: %s na unidade %s", $dado['id_chefe'], $dado['id_unidade']), $chefeAtribuicoes);
+        SiapeLog::info(sprintf("atribuições do usuário: %s na unidade %s", $dado['id_chefe'], $dado['id_unidade']), $chefeAtribuicoes);
 
         $vinculo = $this->preparaVinculo($dado['id_chefe'], $unidadeExercicioId, $chefeAtribuicoes);
 
-        $this->logSiape("Salvando integrantes", $vinculo, Tipo::INFO);
+        SiapeLog::info("Salvando integrantes", $vinculo);
         $this->unidadeIntegranteService->salvarIntegrantes($vinculo, false);
+        $this->removerGestorSubstituto($dado['id_chefe'], $unidadeExercicioId);
 
         $this->alteraPerfilAdministradorNegocial($dado['id_chefe'], $usuarioChefia);
         array_push($this->message['sucesso'], $dado['id_unidade']);
@@ -92,7 +127,7 @@ class Integracao implements InterfaceIntegracao
             'usuario_id' => $idUsuario,
             'unidade_id' => $unidadeExercicioId,
             'atribuicoes' => $atribuicoes,
-        ]);;
+        ]);
     }
 
     private function preparaChefia(array|null $queryChefeAtribuicoes, string $unidadeExercicioId): array
@@ -105,6 +140,13 @@ class Integracao implements InterfaceIntegracao
         if (!in_array(EnumsAtribuicao::GESTOR->value, $chefeAtribuicoes)) array_push($chefeAtribuicoes, EnumsAtribuicao::GESTOR->value);
         $chefeAtribuicoes = array_values(array_unique($chefeAtribuicoes));
         return $chefeAtribuicoes;
+    }
+
+    private function removerGestorSubstituto(string $idUsuario, string $idUnidade): void
+    {
+        $integrante = $this->unidadeIntegranteRepository->findUnidadeIntegrante($idUsuario, $idUnidade);
+        if (!$integrante) return;
+        $this->removeDeterminadasAtribuicoes([EnumsAtribuicao::GESTOR_SUBSTITUTO->value], $integrante);
     }
 
     private function preparaSubstituto(array|null $queryChefeAtribuicoes, string $unidadeExercicioId): array
@@ -149,16 +191,16 @@ class Integracao implements InterfaceIntegracao
                 ':id' => $idUsuario
             ];
             $this->perfilService->alteraPerfilUsuario($idUsuario, $perfilChefeId);
-            $this->logSiape("Atualizando perfil do chefe", $values, Tipo::INFO);
+            SiapeLog::info("Atualizando perfil do chefe", $values);
             return;
         }
-        $this->logSiape("IntegracaoService: durante atualização de gestores, o usuário não teve seu perfil atualizado para um 'perfil de chefia' uma vez que é Desenvolvedor.", [$queryChefe->nome, $queryChefe->email]);
+        SiapeLog::info("IntegracaoService: durante atualização de gestores, o usuário não teve seu perfil atualizado para um 'perfil de chefia' uma vez que é Desenvolvedor.", [$queryChefe->nome, $queryChefe->email]);
     }
 
     /**
      * Undocumented function
      *
-     * @return array{sucesso: string, id_chefe: erro, vazio: string}[] 
+     * @return array<string, string[]>
      */
     public function getMessage(): array
     {

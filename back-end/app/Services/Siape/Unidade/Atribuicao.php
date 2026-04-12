@@ -8,11 +8,21 @@ use App\Models\Unidade;
 use App\Models\UnidadeIntegrante;
 use App\Models\UnidadeIntegranteAtribuicao;
 use App\Models\Usuario;
+use App\Services\NivelAcessoService;
+use App\Repository\UnidadeRepository;
+use App\Repository\UnidadeIntegranteRepository;
+use App\Repository\UnidadeIntegranteAtribuicaoRepository;
+use App\Repository\UsuarioRepository;
 use App\Services\Siape\Unidade\Enum\Atribuicao as EnumAtribuicao;
 
 trait Atribuicao
 {
     private array $alteracoes = [];
+
+    abstract public function getUnidadeIntegranteRepository(): UnidadeIntegranteRepository;
+    abstract public function getUnidadeIntegranteAtribuicaoRepository(): UnidadeIntegranteAtribuicaoRepository;
+    abstract public function getUsuarioRepository(): UsuarioRepository;
+    abstract public function getUnidadeRepository(): UnidadeRepository;
 
     function executarAcao(string $atribuicao, Usuario $usuario, Unidade $unidadeDestino, UnidadeIntegrante $integranteNovoOuExistente): array
     {
@@ -54,13 +64,14 @@ trait Atribuicao
     private function processaCurador(Unidade $unidadeDestino, Usuario $usuario, UnidadeIntegrante $integranteNovoOuExistente)
     {
          /**
-         * @var UnidadeIntegrante|null[] $curadores
+         * @var \Illuminate\Database\Eloquent\Collection|\App\Models\UnidadeIntegrante[] $curadores
          */
-        $curadores = $usuario->curadores;
+        $curadores = $this->getUnidadeIntegranteRepository()->findCuradoresByUsuario($usuario->id);
         foreach ($curadores as $curador) {
+            if (!$curador) continue;
             if ($curador->unidade_id != $unidadeDestino->id) continue;
             if ($curador->usuario_id == $usuario->id) {
-                $this->alteracoes = ['info' => sprintf('O servidor já é curador da unidade!', $usuario->id, $unidadeDestino->id)];
+                $this->alteracoes = ['info' => sprintf('O servidor %s já é curador da unidade %s!', $usuario->id, $unidadeDestino->id)];
                 return;
             }
         }
@@ -72,18 +83,24 @@ trait Atribuicao
     private function processaColaborador(Unidade $unidadeDestino, Usuario $usuario, UnidadeIntegrante $integranteNovoOuExistente)
     {
         /**
-         * @var UnidadeIntegrante|null[] $colaboracoes
+         * @var \Illuminate\Database\Eloquent\Collection|\App\Models\UnidadeIntegrante[] $colaboracoes
          */
-        $colaboracoes = $usuario->colaboracoes;
+        $colaboracoes = $this->getUnidadeIntegranteRepository()->findColaboracoesByUsuario($usuario->id);
 
         foreach ($colaboracoes as $colaboracao) {
+            if (!$colaboracao) continue;
             if ($colaboracao->unidade_id != $unidadeDestino->id) continue;
             if ($colaboracao->usuario_id == $usuario->id) {
-                $this->alteracoes = ['info' => sprintf('O servidor já é colaborador da unidade!', $usuario->id, $unidadeDestino->id)];
+                $this->alteracoes = ['info' => sprintf('O servidor %s já é colaborador da unidade %s!', $usuario->id, $unidadeDestino->id)];
                 return;
             }
         }
 
+        if (!$unidadeDestino->executora && $usuario->perfil->nivel != NivelAcessoService::PERFIL_COLABORADOR) {
+            $this->alteracoes = ['info' => sprintf('Não é possível atribuir Colaborador a um usuário com perfil diferente de Colaborador em unidade não executora! Usuário: %s, Unidade: %s', $usuario->id, $unidadeDestino->id)];
+            return;
+        }
+        
         $this->alteracoes = ['lotacao' => sprintf('Atribuindo Colaborador ao servidor %s na Unidade %s', $usuario->id, $unidadeDestino->id)];
         $this->lotaServidor(EnumAtribuicao::COLABORADOR, $integranteNovoOuExistente);
     }
@@ -91,15 +108,15 @@ trait Atribuicao
     private function processaGestorSubstituto(Unidade $unidadeDestino, Usuario $usuario, UnidadeIntegrante $integranteNovoOuExistente)
     {
         /**
-         * @var UnidadeIntegrante|null $lotacoes
+         * @var \Illuminate\Database\Eloquent\Collection|\App\Models\UnidadeIntegrante[] $lotacoes
          */
-        $lotacoes = $usuario->gerenciasSubstitutas;
+        $lotacoes = $this->getUnidadeIntegranteRepository()->findGerenciasSubstitutasByUsuario($usuario->id);
 
         foreach ($lotacoes as $lotacao) {
             if ($lotacao->unidade_id != $unidadeDestino->id) continue;
 
             if (!empty($integranteNovoOuExistente->gestorSubstituto) && $lotacao->gestorSubstituto->id == $integranteNovoOuExistente->gestorSubstituto->id) {
-                $this->alteracoes = ['info' => sprintf('O servidor já é gestor substituto da unidade!', $usuario->id, $unidadeDestino->id)];
+                $this->alteracoes = ['info' => sprintf('O servidor %s já é gestor substituto da unidade %s!', $usuario->id, $unidadeDestino->id)];
                 return;
             }
         }
@@ -109,15 +126,15 @@ trait Atribuicao
     private function processaGestorDelegado(Unidade $unidadeDestino, Usuario $usuario, UnidadeIntegrante $integranteNovoOuExistente)
     {
         /**
-         * @var UnidadeIntegrante|null $lotacoes
+         * @var \Illuminate\Database\Eloquent\Collection|\App\Models\UnidadeIntegrante[] $lotacoes
          */
-        $lotacoes = $usuario->gerenciasDelegadas;
+        $lotacoes = $this->getUnidadeIntegranteRepository()->findGerenciasDelegadasByUsuario($usuario->id);
 
         foreach ($lotacoes as $lotacao) {
             if ($lotacao->unidade_id != $unidadeDestino->id) continue;
 
             if (!empty($integranteNovoOuExistente->gestorDelegado) && $lotacao->gestorDelegado->id == $integranteNovoOuExistente->gestorDelegado->id) {
-                $this->alteracoes = ['info' => sprintf('O servidor já é gestor delegado da unidade!', $usuario->id, $unidadeDestino->id)];
+                $this->alteracoes = ['info' => sprintf('O servidor %s já é gestor delegado da unidade %s!', $usuario->id, $unidadeDestino->id)];
                 return;
             }
         }
@@ -129,12 +146,7 @@ trait Atribuicao
         if (!empty($this->getUnidadeAtualDoUsuario($usuario)) && $this->getUnidadeAtualDoUsuario($usuario)->id == $unidadeDestino->id) {
             $this->alteracoes = ['info' => sprintf('O servidor  %s já está lotado nessa unidade %s:', $usuario->id, $unidadeDestino->id)];
             return;
-        }
-        
-        if ($this->usuarioTemPlanodeTrabalhoAtivo($usuario, $this->getUnidadeAtualDoUsuario($usuario))) {
-            $this->alteracoes = ['lotacao' => sprintf('O servidor %s já possui um plano de trabalho ativo nessa unidade %s, alterando a lotação para COLABORADOR:', $usuario->id, $unidadeDestino->id)];
-            $this->processaColaborador($unidadeDestino, $usuario,  $usuario->lotacao);
-        }
+        }               
 
         if ($this->usuarioEGestorEmOutraUnidade($usuario, $unidadeDestino)) {
             $this->alteracoes = ['removido' => sprintf('Removendo o Gestor %s de outra Unidade pois ele será lotado na unidade %s', $usuario->id, $unidadeDestino->id)];
@@ -153,10 +165,10 @@ trait Atribuicao
             $this->removeAtualGestorDaUnidade($unidadeDestino);
         }
 
-         $usuario = Usuario::find($usuario->id);
+         $usuario = $this->getUsuarioRepository()->findById($usuario->id);
 
         if(!is_null($this->getUnidadeAtualDoUsuario($usuario)) && $this->getUnidadeAtualDoUsuario($usuario)->id !== $unidadeDestino->id){
-            $this->alteracoes = ['info' => sprintf('O servidor %s está lotado na unidade %s, nesse cenário ele não será lotado como gestor da unidade %s:', $usuario->id,$usuario->lotacao->unidade_id, $unidadeDestino->id)];
+            $this->alteracoes = ['info' => sprintf('O servidor %s está lotado na unidade %s, nesse cenário ele não será lotado como gestor da unidade %s:', $usuario->id, $this->getUnidadeAtualDoUsuario($usuario)->id, $unidadeDestino->id)];
             // Nesse cenário, garente que o servidor não será lotado como gestor da unidade.
             $this->removeDeterminadasAtribuicoes([EnumAtribuicao::GESTOR->value], $integranteNovoOuExistente);
             return;
@@ -181,18 +193,24 @@ trait Atribuicao
         $this->lotaServidor(EnumAtribuicao::GESTOR, $integranteNovoOuExistente);
     }
 
-    private function removeTodasAsGestoesDoUsuario(Usuario $usuario): void
+    protected function removeTodasAsGestoesDoUsuario(Usuario $usuario): void
     {
-        $usuario->gerencias->each(function (UnidadeIntegrante $gestao) {
-            $gestao->gestores->each(function (UnidadeIntegranteAtribuicao $gestor) {
-                if ($gestor->atribuicao == EnumAtribuicao::GESTOR->value) $gestor->delete();
+        $this->getUnidadeIntegranteRepository()->findGerenciasTitularesByUsuario($usuario->id)->each(function (UnidadeIntegrante $gestao) {
+            $gestao->gestores()->get()->each(function (UnidadeIntegranteAtribuicao $gestor) {
+                if ($gestor->atribuicao == EnumAtribuicao::GESTOR->value) {
+                    $this->getUnidadeIntegranteAtribuicaoRepository()->delete($gestor->id);
+                }
             });
         });
     }
 
-    private function removeUsuarioDaGestaoAtual(Usuario $usuario): void
+    protected function removeUsuarioDaGestaoAtual(Usuario $usuario): void
     {
-        $usuario->gerenciaTitular->gestor->delete();
+        /** @var UnidadeIntegrante|null $gerenciaTitular */
+        $gerenciaTitular = $this->getUnidadeIntegranteRepository()->findGerenciasTitularesByUsuario($usuario->id)->first();
+        if ($gerenciaTitular && $gerenciaTitular->gestor) {
+            $this->getUnidadeIntegranteAtribuicaoRepository()->delete($gerenciaTitular->gestor->id);
+        }
     }
 
     private function usuarioEGestorEmOutraUnidade(Usuario $usuario, Unidade $unidade): bool
@@ -203,23 +221,31 @@ trait Atribuicao
     public function removeAtualGestorDaUnidade(Unidade $unidade): void
     {
         if ($this->getGestorAtualDaUnidade($unidade)) {
-            $unidade->gestor->gestor->delete();
+            $gestorIntegrante = $this->getUnidadeIntegranteRepository()->findGestorByUnidade($unidade->id);
+            if ($gestorIntegrante && $gestorIntegrante->gestor) {
+                $this->getUnidadeIntegranteAtribuicaoRepository()->delete($gestorIntegrante->gestor->id);
+            }
         }
     }
 
     private function getUnidadeOndeOUsuarioEGestor(Usuario $usuario): Unidade|null
     {
-        return $usuario->gerenciaTitular ? $usuario->gerenciaTitular->unidade : null;
+        /** @var UnidadeIntegrante|null $gerenciaTitular */
+        $gerenciaTitular = $this->getUnidadeIntegranteRepository()->findGerenciasTitularesByUsuario($usuario->id)->first();
+        return $gerenciaTitular ? $gerenciaTitular->unidade : null;
     }
 
     private function getGestorAtualDaUnidade(Unidade $unidade): Usuario|null
     {
-        return $unidade->gestor ? $unidade->gestor->usuario : null;
+        $gestorIntegrante = $this->getUnidadeIntegranteRepository()->findGestorByUnidade($unidade->id);
+        return $gestorIntegrante ? $gestorIntegrante->usuario : null;
     }
 
     private function getUnidadeAtualDoUsuario(Usuario $usuario): Unidade|null
     {
-        return $usuario->lotacao ? $usuario->lotacao->unidade : null;
+        /** @var UnidadeIntegrante|null $lotacao */
+        $lotacao = $this->getUnidadeIntegranteRepository()->findLotacoesByUsuario($usuario->id)->first();
+        return $lotacao ? $lotacao->unidade : null;
     }
 
     public function usuarioTemPlanodeTrabalhoAtivo(Usuario $usuario, ?Unidade $unidade): bool
@@ -232,26 +258,46 @@ trait Atribuicao
 
     private function lotaServidor(EnumAtribuicao $atribuicao, UnidadeIntegrante $unidadeIntegrante)
     {
-        UnidadeIntegranteAtribuicao::create(["atribuicao" => $atribuicao->value, "unidade_integrante_id" => $unidadeIntegrante->id])->save();
+
+        $created = $this->getUnidadeIntegranteAtribuicaoRepository()->create([
+            "atribuicao" => $atribuicao->value,
+            "unidade_integrante_id" => $unidadeIntegrante->id
+        ]);
+        $saved = $created->save();
+        
+        SiapeLog::info("Retorno ao criar atribuição em unidades_integrantes_atribuicoes", [
+            'id' => $created->getKey(),
+            'exists' => $created->exists,
+            'saved' => $saved,
+            'atribuicao' => $created->getAttribute('atribuicao'),
+            'unidade_integrante_id' => $created->getAttribute('unidade_integrante_id'),
+        ]);
     }
 
-    private function removeLotacao(Usuario $usuario): void
+    protected function removeLotacao(Usuario $usuario): void
     {
-        $lotacoes = $usuario->lotacoes;
+        $lotacoes = $this->getUnidadeIntegranteRepository()->findLotacoesByUsuario($usuario->id);
         foreach ($lotacoes as $lotacao) {
-            if ($lotacao->lotado->atribuicao == EnumAtribuicao::LOTADO->value) $lotacao->lotado->delete();
+            /** @var UnidadeIntegrante $lotacao */
+            if ($lotacao->lotado->atribuicao == EnumAtribuicao::LOTADO->value) {
+                $this->getUnidadeIntegranteAtribuicaoRepository()->delete($lotacao->lotado->id);
+            }
         }
     }
-
 
     private function LimparAtribuicoes(UnidadeIntegrante $integranteNovoOuExistente, bool $removerLotado = false): void
     {
         if ($removerLotado) {
-            $integranteNovoOuExistente->atribuicoes()->delete();
+            // $integranteNovoOuExistente->atribuicoes()->delete();
+             foreach($integranteNovoOuExistente->atribuicoes as $atribuicao) {
+                $this->getUnidadeIntegranteAtribuicaoRepository()->delete($atribuicao->id);
+             }
             return;
         }
         $integranteNovoOuExistente->atribuicoes()->each(function ($unidadeIntegrantesAtribuicoes) {
-            if ($unidadeIntegrantesAtribuicoes->atribuicao != EnumAtribuicao::LOTADO->value)  $unidadeIntegrantesAtribuicoes->delete();
+            if ($unidadeIntegrantesAtribuicoes->atribuicao != EnumAtribuicao::LOTADO->value) {
+                $this->getUnidadeIntegranteAtribuicaoRepository()->delete($unidadeIntegrantesAtribuicoes->id);
+            }
         });
         return;
     }
@@ -297,7 +343,7 @@ trait Atribuicao
         foreach ($integranteNovoOuExistente->atribuicoes as $atribuicao) {
             if (in_array($atribuicao->atribuicao, $atribuicoesRemover)) {
                 SiapeLog::info(sprintf("Removendo atribuição %s da unidade %s do integrante %s", $atribuicao->atribuicao, $integranteNovoOuExistente->unidade_id, $integranteNovoOuExistente->usuario_id));
-                $atribuicao->delete();
+                $this->getUnidadeIntegranteAtribuicaoRepository()->delete($atribuicao->id);
             }
         }
     }

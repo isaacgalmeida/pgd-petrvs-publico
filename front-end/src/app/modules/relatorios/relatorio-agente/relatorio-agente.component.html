@@ -26,11 +26,9 @@
                 [dao]="unidadeDao"
                 [selectRoute]="{
                     route: ['configuracoes', 'unidade'],
-                    params: auth.hasPermissionTo('MOD_RELATORIO_USUARIO_TODAS_UNIDADES')
-                    ? { }
-                    : { unidade_pai: auth.unidade?.id }
+                    params: { unidades: this.unidades }
                 }"
-                [where]="auth.hasPermissionTo('MOD_RELATORIO_USUARIO_TODAS_UNIDADES')
+                [where]="auth.hasPermissionTo(permissao + '_TODAS_UNIDADES')
                     ? []
                     : [['id', 'in', this.unidades]]"
             >
@@ -194,7 +192,7 @@
                 ></input-select>
             </ng-template>
             <ng-template let-row="row" #columnModalidadeSouGov>
-                <span>{{row.participaPGD === 'sim' ? row.modalidadeSouGov || '-' : '-'}}</span>
+                <span>{{row.modalidadeSouGov || '-'}}</span>
             </ng-template>
         </column>
 
@@ -212,7 +210,7 @@
                 ></input-select>
             </ng-template>
             <ng-template let-row="row" #columnModalidade>
-                <span>{{row.tipoModalidadeNome || '-'}}</span>
+                <span>{{row.tipoModalidadeNome}}</span>
             </ng-template>
         </column>
 

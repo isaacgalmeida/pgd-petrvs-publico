@@ -2,38 +2,58 @@
 
 namespace App\Services;
 
+use App\Enums\PlanoEntregaStatus;
 use App\Models\Unidade;
 use App\Models\PlanoEntrega;
 use App\Models\Usuario;
 use App\Models\StatusJustificativa;
 use App\Exceptions\ServerException;
+use App\Exceptions\ValidateException;
 use App\Models\PlanoEntregaEntrega;
 use App\Models\PlanoTrabalhoEntrega;
 use App\Models\Programa;
 use App\Models\TipoAvaliacao;
+use App\Models\Avaliacao;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use DateTime;
 use Illuminate\Support\Facades\Log;
+use App\Services\NotificacoesService;
+use App\Services\PlanoTrabalhoEntregaService;
+use App\Services\PlanoTrabalhoService;
+use App\Services\StatusService;
+use App\Services\UnidadeService;
+use App\Services\UsuarioService;
+use App\Repository\UsuarioRepository;
+use Illuminate\Support\Carbon;
 use Throwable;
 
+/**
+ * @property StatusService $statusService
+ * @property PlanoTrabalhoService $planoTrabalhoService
+ * @property NotificacoesService $notificacoesService
+ * @property UsuarioService $usuarioService
+ * @property UsuarioService $usuario
+ * @property UnidadeService $unidadeService
+ * @property UnidadeService $unidade
+ * @property PlanoTrabalhoEntregaService $planoTrabalhoEntregaService
+ */
 class PlanoEntregaService extends ServiceBase
 {
-    public $unidades = []; /* Buffer de unidades para funções que fazem consulta frequentes em unidades */
+    protected UsuarioRepository $usuarioRepository;
 
-    public function alteracaoEntregaImpactaPlanoTrabalho($entregaAlterada)
-    {
-        $entregaAnterior = PlanoEntregaEntrega::find($entregaAlterada["id"]);
-        return $entregaAnterior->descricao != $entregaAlterada["descricao"] ||
-            $this->utilService->asTimestamp($entregaAnterior->data_inicio) != $this->utilService->asTimestamp($entregaAlterada["data_inicio"]) ||
-            $this->utilService->asTimestamp($entregaAnterior->data_fim) != $this->utilService->asTimestamp($entregaAlterada["data_fim"]);
+    public function __construct() {
+        parent::__construct();
+        $this->usuarioRepository = app(UsuarioRepository::class);
     }
+
+    public $unidades = []; /* Buffer de unidades para funções que fazem consulta frequentes em unidades */
 
     public function planosImpactadosPorAlteracaoEntrega($entrega)
     {
         $impactados = [];
         $planoEntregaEntrega = PlanoEntregaEntrega::find($entrega["id"]);
-        if ($planoEntregaEntrega?->planoEntrega?->Programa?->termo_obrigatorio && ($entrega["_status"] == "DELETE" || ($entrega["_status"] == "EDIT" && $this->alteracaoEntregaImpactaPlanoTrabalho($entrega)))) {
+        if ($planoEntregaEntrega?->planoEntrega?->Programa?->termo_obrigatorio && $entrega["_status"] == "DELETE") {
             foreach (PlanoTrabalhoEntrega::where("plano_entrega_entrega_id", $entrega["id"])->get() as $entregaPlanoTrabalho) {
                 if (!in_array($entregaPlanoTrabalho->plano_trabalho_id, $impactados))
                     $impactados[] = $entregaPlanoTrabalho->plano_trabalho_id;
@@ -59,6 +79,7 @@ class PlanoEntregaService extends ServiceBase
 
     public function extraStore($planoEntrega, $unidade, $action)
     {
+        /** @var \App\Models\PlanoEntrega $planoEntrega */
         $usuario = parent::loggedUser();
         switch ($action) {
             case ServiceBase::ACTION_INSERT:
@@ -80,11 +101,7 @@ class PlanoEntregaService extends ServiceBase
                 //(RN_PENT_AE) Se a alteração for feita com o plano de entregas no status ATIVO e o usuário logado possuir a capacidade "MOD_PENT_EDT_ATV_HOMOL", o plano de entregas voltará ao status "HOMOLOGANDO";
                 //(RN_PENT_AF) Se a alteração for feita com o plano de entregas no status ATIVO e o usuário logado possuir a capacidade "MOD_PENT_EDT_ATV_ATV", o plano de entregas permanecerá no status "ATIVO";
                 if ($planoEntrega->status == 'ATIVO') {
-                    if ($usuario->hasPermissionTo('MOD_PENT_EDT_ATV_ATV')) {
-                        $this->statusService->atualizaStatus($planoEntrega, 'ATIVO', 'O plano foi alterado nesta data e permaneceu no status ATIVO porque o usuário logado possui a capacidade MOD_PENT_EDT_ATV_ATV.');
-                    } else if ($usuario->hasPermissionTo('MOD_PENT_EDT_ATV_HOMOL')) {
-                        $this->statusService->atualizaStatus($planoEntrega, 'HOMOLOGANDO', 'O plano foi alterado nesta data e retornou ao status AGUARDANDO HOMOLOGAÇÃO porque o usuário logado possui a capacidade MOD_PENT_EDT_ATV_HOMOL.');
-                    }
+                    $this->statusService->atualizaStatus($planoEntrega, 'ATIVO', 'O plano foi alterado nesta data e permaneceu no status ATIVO.');
                     // (RN_PENT_M) Qualquer alteração, depois de o Plano de Entregas ser homologado, precisa ser notificada
                     // ao gestor da Unidade-pai (Unidade A) ou à pessoa que homologou. Essa comunicação sobre eventuais ajustes,
                     // não se aplica à Unidade Instituidora, ou seja, alterações realizadas em planos de entregas de unidades instituidoras não precisam ser notificadas à sua Unidade-pai;
@@ -201,15 +218,16 @@ class PlanoEntregaService extends ServiceBase
             $result["nrEntregas"] = empty($planoEntrega['entregas']) ? 0 : count($planoEntrega['entregas']);
             $result["planoArquivado"] = empty($planoEntrega['id']) ? false : PlanoEntrega::find($planoEntrega['id'])->data_arquivamento != null;
             $result["planoSuspenso"] = $this->isPlano("SUSPENSO", $planoEntrega);
+            $result["planoCancelado"] = ($planoEntrega['status'] == "CANCELADO");
             $result["planoStatus"] = empty($planoEntrega['id']) ? null : PlanoEntrega::find($planoEntrega['id'])->status;
             $result["gestorUnidadePlano"] = $this->usuario->isGestorUnidade($planoEntrega['unidade_id']);
             $result["gestorUnidadePaiUnidadePlano"] = !empty($planoEntrega['unidade']['unidade_pai_id']) && $this->usuario->isGestorUnidade($planoEntrega['unidade']['unidade_pai_id']);
             $result["gestorLinhaAscendenteUnidadePlano"] = !!array_filter($this->unidade->linhaAscendente($planoEntrega['unidade_id']), fn($u) => $this->usuario->isGestorUnidade($u));
             $result["unidadePlanoPaiEhUnidadePaiUnidadePlano"] = $planoEntrega['plano_entrega_id'] ? $planoEntregaPai->unidade_id == $planoEntrega['unidade']['unidade_pai_id'] : false;
-            $result["unidadePlanoEhLotacao"] = $this->usuario->isLotacao(null, $planoEntrega['unidade_id']);
-            $result["unidadePaiUnidadePlanoEhLotacao"] = !empty($planoEntrega['unidade']['unidade_pai_id']) && $this->usuario->isLotacao(null, $planoEntrega['unidade']['unidade_pai_id']);
+            $result["unidadePlanoEhLotacao"] = $this->usuarioRepository->isLotacao(parent::loggedUser()->id, $planoEntrega['unidade_id']);
+            $result["unidadePaiUnidadePlanoEhLotacao"] = !empty($planoEntrega['unidade']['unidade_pai_id']) && $this->usuarioRepository->isLotacao(parent::loggedUser()->id, $planoEntrega['unidade']['unidade_pai_id']);
             $result["unidadePlanoEhAlgumaLotacaoUsuario"] = in_array($planoEntrega['unidade_id'], array_map(fn($u) => $u['id'], $this->usuario->loggedUser()->unidades->toArray()));
-            $result["unidadePlanoEhPaiAlgumaLotacaoUsuario"] = $this->usuario->loggedUser()->unidades->map(fn($u) => $u->id)->map(fn($ul) => Unidade::find($ul)->unidade_id)->contains($planoEntrega['unidade_id']);
+            $result["unidadePlanoEhPaiAlgumaLotacaoUsuario"] = $this->usuario->loggedUser()->unidades->map(fn($u) => $u->id)->map(fn($ul) => Unidade::find($ul)->unidade_pai_id)->contains($planoEntrega['unidade_id']);
             $result["unidadePlanoPossuiPlanoAtivoMesmoPeriodoPlanoPai"] = !!array_filter($planoEntrega['unidade']['planosEntrega'], fn($p) => $this->isPlano('ATIVO', $p) && !empty($planoEntrega) && !empty($planoEntregaPai) && UtilService::intersect($planoEntrega['data_inicio'], $planoEntrega['data_fim'], $planoEntregaPai->data_inicio, $planoEntregaPai->data_fim));
             $result["lotadoLinhaAscendenteUnidadePlano"] = $this->usuario->isLotadoNaLinhaAscendente($planoEntrega['unidade_id']);
             $result["unidadePlanoEstahLinhaAscendenteAlgumaLotacaoUsuario"] = in_array($planoEntrega['unidade_id'], array_values(array_unique(array_reduce(array_map(fn($ul) => $this->unidade->linhaAscendente($ul), array_map(fn($u) => $u['id'], $this->usuario->loggedUser()->unidades->toArray())), 'array_merge', array()))));
@@ -280,6 +298,7 @@ class PlanoEntregaService extends ServiceBase
 
     public function concluir($data, $unidade)
     {
+        $this->validaConclusaoPlanoEntrega($data["id"]);
         try {
             DB::beginTransaction();
             $planoEntrega = PlanoEntrega::find($data["id"]);
@@ -293,14 +312,35 @@ class PlanoEntregaService extends ServiceBase
     }
 
     /**
+     * Valida se é possível concluir o plano de entrega indicado
+     */
+    public function validaConclusaoPlanoEntrega(string $idPlano): bool{
+        $planoEntrega = PlanoEntrega::find($idPlano);
+        if(empty($planoEntrega)){
+            throw new ValidateException("Plano de Entrega não encontrado!");
+        }
+        if($planoEntrega->status != PlanoEntregaStatus::ATIVO->value){
+            throw new ValidateException("Plano de Entrega não está ativo!");
+        }
+        $entregas = $planoEntrega->entregas;
+        foreach($entregas as $entrega){
+            if($entrega->progressos->isEmpty()){
+                throw new ValidateException("Antes de concluir, é necessário fazer a descrição da evolução da entrega!");
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Informa se o plano de entregas repassado como parâmetro está em curso.
      * Um Plano de Entregas está EM CURSO quando é um plano VÁLIDO e possui status ATIVO;
-     * @param PlanoEntrega $planoEntrega
+     * @param PlanoEntrega $plano
      */
     public function emCurso(PlanoEntrega $plano): bool
     {
         $planoEntrega = !empty($plano['id']) ? PlanoEntrega::find($plano['id']) : $plano;
-        return empty($plano['id']) ? false : ($this->isPlanoEntregaValido($plano) && $planoEntrega->status == 'ATIVO');
+        return empty($plano['id']) ? false : ($this->isPlanoEntregaValido($plano) && $planoEntrega->status == PlanoEntregaStatus::ATIVO->value);
     }
 
     public function homologar($data, $unidade)
@@ -321,7 +361,7 @@ class PlanoEntregaService extends ServiceBase
      * Informa o status do plano de entregas repassado como parâmetro.
      * O Plano de Entregas precisa ser VÁLIDO.
      * @param string $status
-     * @param array $planoEntrega
+     * @param array $plano
      */
     public function isPlano($status, $plano): bool
     {
@@ -332,7 +372,7 @@ class PlanoEntregaService extends ServiceBase
     /**
      * Informa se o plano de entregas repassado como parâmetro é um plano válido.
      * Um Plano de Entregas é válido se não foi deletado, nem arquivado e não está no status de cancelado.
-     * @param array $planoEntrega
+     * @param array $plano
      */
     public function isPlanoEntregaValido($plano): bool
     {
@@ -342,9 +382,12 @@ class PlanoEntregaService extends ServiceBase
 
     public function liberarHomologacao($data, $unidade)
     {
+        $planoEntrega = PlanoEntrega::find($data["id"]);
+        if($this->planosUnidadeComPendenciasExecucaoAvaliacao($planoEntrega["unidade_id"], $planoEntrega["id"], now()))
+            throw new ValidateException("Não é possível liberar para homologação um plano enquanto houver pendências de registro de execução e/ou avaliação de planos anteriores!");
+
         try {
             DB::beginTransaction();
-            $planoEntrega = PlanoEntrega::find($data["id"]);
             $this->statusService->atualizaStatus($planoEntrega, 'HOMOLOGANDO', $data["justificativa"]);
             DB::commit();
         } catch (Throwable $e) {
@@ -376,6 +419,17 @@ class PlanoEntregaService extends ServiceBase
     {
         $where = $ids = [];
 
+        $data['select'][]= DB::raw(
+        "(
+            select 1
+            from planos_entregas_entregas
+                join planos_entregas_entregas_progressos
+                    on planos_entregas_entregas.id = planos_entregas_entregas_progressos.plano_entrega_entrega_id
+            where planos_entregas_entregas.plano_entrega_id = planos_entregas.id and
+                planos_entregas_entregas_progressos.deleted_at is null
+            limit 1
+        ) is not null as has_progresso"
+        );
         //  (RI_PENT_C) Garante que, se não houver um interesse específico na data de arquivamento, só retornarão os planos de entrega não arquivados.
         $arquivados = $this->extractWhere($data, "incluir_arquivados");
         $subordinadas = $this->extractWhere($data, "incluir_subordinadas");
@@ -395,7 +449,7 @@ class PlanoEntregaService extends ServiceBase
         }
 
         if (!empty($subordinadas[2])) {
-            $unidadeService = new UnidadeService();
+            $unidadeService = app(UnidadeService::class);
 
             // Define $uId corretamente, verificando a existência do índice
             if (empty($unidadeId)) {
@@ -563,14 +617,24 @@ class PlanoEntregaService extends ServiceBase
         $usuario = Usuario::find(parent::loggedUser()->id);
         $programa = Programa::find($dataOrEntity["programa_id"]);
         $this->validaPermissaoIncluir($dataOrEntity, $usuario);
+        $unidade = Unidade::find($dataOrEntity["unidade_id"]);
+        if(!is_null($unidade?->data_inativacao)){
+            throw new ServerException("ValidatePlanoEntrega", "A unidade está inativa.");
+        }
+
         if (!$usuario->hasPermissionTo('MOD_PENT_ENTR_EXTRPL')) {
             if (!$this->verificaDuracaoPlano($dataOrEntity) || !$this->verificaDatasEntregas($dataOrEntity))
                 throw new ServerException("ValidatePlanoEntrega", "O prazo das datas não satisfaz a duração estipulada no programa.");
         }
         if ($this->temSobreposicaoDeDatas($dataOrEntity))
             throw new ServerException("ValidatePlanoEntrega", "Esta unidade já possui plano de entregas cadastrado para o período.");
-        if (!$this->programaService->programaVigente($programa))
-            throw new ServerException("ValidatePlanoEntrega", "O regramento não está vigente.");
+
+        $inicioPlano = Carbon::parse($dataOrEntity["data_inicio"]);
+        $fimPlano = Carbon::parse($dataOrEntity["data_fim"]);
+        if ($inicioPlano < $programa->data_inicio || $fimPlano > $programa->data_fim) {
+            throw new ServerException("ValidatePlanoEntrega", "As datas do plano de entregas estão fora do período vigência do regramento.");
+        }
+
         if ($action == ServiceBase::ACTION_EDIT) {
             /*
               (RN_PENT_L) Para ALTERAR um plano de entregas:
@@ -601,7 +665,31 @@ class PlanoEntregaService extends ServiceBase
                 throw new ServerException("ValidatePlanoEntrega", "Depois de criado um Plano de Entregas, não é possível alterar a sua Unidade.\n[ver RN_PENT_K]");
             if ($dataOrEntity["programa_id"] != $planoEntrega->programa_id)
                 throw new ServerException("ValidatePlanoEntrega", "Depois de criado um Plano de Entregas, não é possível alterar o seu Programa.\n[ver RN_PENT_K]");
+            $this->verificaContribuicoesEntregas($dataOrEntity["entregas"]);
         }
+        if ($action == ServiceBase::ACTION_INSERT) {
+            /* Só é permitido o cadastro de planos em unidades definidas como executoras */
+            if(!$this->unidadeService->isUnidadeExecutora($dataOrEntity["unidade_id"])){
+                throw new ValidateException("Não é possível criar um plano para unidades não executoras.", 422);
+            }
+            $planosComPendencias = $this->planosUnidadeComPendencias($dataOrEntity["unidade_id"]);
+            if ($planosComPendencias) {
+                throw new ServerException("ValidatePlanoEntrega", "Não é possível criar um novo plano enquanto houver pendências de registro de execução e/ou avaliação de planos anteriores.");
+            }
+
+            $this->validaPlanoComEntregas($dataOrEntity);
+        }
+    }
+
+    private function verificaContribuicoesEntregas($entregas){
+        $idsEntregasDelete = [];
+        foreach ($entregas as $entrega) {
+            if (isset($entrega['_status']) && $entrega['_status'] === 'DELETE') {
+                $idsEntregasDelete[] = $entrega['id'];
+            }
+        }
+        if($idsEntregasDelete && $this->planoTrabalhoEntregaService->hasContribuicao($idsEntregasDelete))
+            throw new ValidateException("Há contribuição de participantes para uma entrega removida, por isso o plano não pode ser editado");
     }
 
     /**
@@ -634,6 +722,8 @@ class PlanoEntregaService extends ServiceBase
                 ->where('data_fim', '>=', $dataInicio);
         })
         ->where('id', '!=', UtilService::valueOrNull($planoEntrega, 'id'))
+        ->whereNull('deleted_at')
+        ->whereNull('data_arquivamento')
         ->get();
 
         return $planosDaUnidade->count() > 0;
@@ -660,10 +750,10 @@ class PlanoEntregaService extends ServiceBase
     /**
      * Completa o processo de avaliação para o plano de entrega
      *
-     * @param Avanliacao $avaliacao Avaliacao
+     * @param Avaliacao $avaliacao Avaliacao
      * @return  void
      */
-    public function avaliar($avaliacao)
+    public function avaliar(Avaliacao $avaliacao)
     {
         $planoEntrega = $avaliacao->planoEntrega;
         $planoEntrega->avaliacao_id = $avaliacao->id;
@@ -673,62 +763,49 @@ class PlanoEntregaService extends ServiceBase
         //if ($data["arquivar"]) $this->update(["id" => $planoEntrega->id, "data_arquivamento" => $this->dataHora()], $unidade, false);
     }
 
-}
+    private function planosUnidadeComPendencias($unidadeId): bool
+    {
+        $planos = PlanoEntrega::where('unidade_id', $unidadeId)
+            ->whereNotIn('status', ['CANCELADO', 'SUSPENSO'])
+            ->orderByDesc('numero')
+            ->take(2)
+            ->get();
 
-/**
- *                  MAPA DE COBERTURA DAS REGRAS DE NEGÓCIO - PLANO DE ENTREGAS
- *
- *   REGRAS NÃO     REGRAS TOTALMENTE        OUTRAS REGRAS       OUTRAS REGRAS
- *   IMPLEMENTADAS  IMPLEMENTADAS            100% COBERTAS       PARCIALMENTE COBERTAS
- *                  ----------------------------------------------------------------------
- *                  RN_PENT_A
- *                  RN_PENT_B
- *                  RN_PENT_C
- *                  RN_PENT_D
- *                  RN_PENT_E
- *                  RN_PENT_F
- *                  RN_PENT_G
- *   RN_PENT_H
- *                  RN_PENT_I
- *                  RN_PENT_J
- *                  RN_PENT_K
- *                  RN_PENT_L
- *                  RN_PENT_M
- *                  RN_PENT_N
- *                                                                  RN_PENT_O
- *                  RN_PENT_P
- *   RN_PENT_Q
- *                  RN_PENT_R
- *                  RN_PENT_S
- *                  RN_PENT_T
- *                  RN_PENT_U
- *                  RN_PENT_V
- *                  RN_PENT_W
- *                  RN_PENT_X
- *                  RN_PENT_Y
- *                  RN_PENT_Z
- *                  RN_PENT_AA
- *                  RN_PENT_AB
- *                  RN_PENT_AC
- *                  RN_PENT_AD
- *                  RN_PENT_AE
- *                  RN_PENT_AF
- *                  RN_PENT_AG
- *   RI_PENT_A
- *                  RI_PENT_B
- *                  RI_PENT_C
- *
- * Regras relativas a adesão de planos de entregas, assunto
- * adiado para discussão futura
- *   RN_PENT_2_1
- *   RN_PENT_2_2
- *                  RN_PENT_2_3
- *                  RN_PENT_2_4
- *   RN_PENT_2_5
- *   RN_PENT_2_6
- *   RN_PENT_2_7
- *   RN_PENT_3_1
- *                  RN_PENT_3_3
- *                  RN_PENT_4_1
- *
- */
+        if ($planos->count() < 2) {
+            return false;
+        }
+
+        $planoAnterior = $planos->get(1);
+
+        return in_array($planoAnterior->status, PlanoEntrega::STATUSES_PENDENTES, true);
+    }
+
+    public function planosUnidadeComPendenciasExecucaoAvaliacao(string $unidadeId, $planoEntregaId, $dataAssinatura): bool
+    {
+        $diasPendenciaDataFinalPlano = 30;
+
+        $planosPendentes = PlanoEntrega::where('unidade_id', $unidadeId)
+            ->whereIn('status', PlanoEntrega::STATUSES_PENDENTES)
+            ->where('id','!=', $planoEntregaId)
+            ->where('data_fim', '<', $dataAssinatura->subDays($diasPendenciaDataFinalPlano))
+            ->get();
+
+        if ($planosPendentes->count() > 0) {
+            return true;
+        }
+
+        return false;
+    }
+
+
+    private function validaPlanoComEntregas($planoEntrega): bool
+    {
+        if (!$planoEntrega["entregas"]) {
+            throw new ValidateException("Não é possível gravar Plano de Entregas sem entrega cadastrada",422);
+        }
+
+        return true;
+    }
+
+
+}

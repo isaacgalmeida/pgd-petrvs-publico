@@ -4,6 +4,9 @@ namespace App\Exceptions;
 
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
+use App\Services\ErrorInterceptor;
 use App\Models\Error;
 use Throwable;
 
@@ -12,7 +15,7 @@ class Handler extends ExceptionHandler
     /**
      * A list of the exception types that are not reported.
      *
-     * @var array
+     * @var array<int, class-string<\Throwable>>
      */
     protected $dontReport = [
         //
@@ -21,7 +24,7 @@ class Handler extends ExceptionHandler
     /**
      * A list of the inputs that are never flashed for validation exceptions.
      *
-     * @var array
+     * @var array<int, string>
      */
     protected $dontFlash = [
         'current_password',
@@ -50,6 +53,12 @@ class Handler extends ExceptionHandler
                     $erro->save();
                 } catch (\Throwable $e) {}
             }
+        });
+
+        $this->renderable(function (Throwable $e, Request $request) {
+            $response = response()->make('', Response::HTTP_INTERNAL_SERVER_ERROR);
+            (new ErrorInterceptor())->intercept($e, $request, $response);
+            return null;
         });
     }
 }

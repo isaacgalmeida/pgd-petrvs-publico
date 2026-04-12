@@ -2,7 +2,7 @@ import {LookupItem} from "../../../../services/lookup.service";
 import {Component, Injector, ViewChild} from "@angular/core";
 import {AbstractControl, FormGroup} from "@angular/forms";
 import {GridComponent} from "src/app/components/grid/grid.component";
-import {ToolbarButton} from "src/app/components/toolbar/toolbar.component";
+import { ToolbarButton } from "src/app/components/toolbar/toolbar-types";
 import {DocumentoDaoService} from "src/app/dao/documento-dao-service";
 import {PlanoTrabalhoDaoService} from "src/app/dao/plano-trabalho-dao.service";
 import {ProgramaDaoService} from "src/app/dao/programa-dao.service";
@@ -19,9 +19,10 @@ import {UtilService} from "src/app/services/util.service";
 import {UnidadeService} from "src/app/services/unidade.service";
 import { QueryOrderBy } from "src/app/dao/dao-base.service";
 @Component({
-	selector: "plano-trabalho-list",
-	templateUrl: "./plano-trabalho-list.component.html",
-	styleUrls: ["./plano-trabalho-list.component.scss"],
+    selector: "plano-trabalho-list",
+    templateUrl: "./plano-trabalho-list.component.html",
+    styleUrls: ["./plano-trabalho-list.component.scss"],
+    standalone: false
 })
 export class PlanoTrabalhoListComponent extends PageListBase<
 	PlanoTrabalho,
@@ -101,6 +102,7 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 		this.code = "MOD_PTR";
 		this.filter = this.fh.FormBuilder(
 			{
+				numero: {default: ""},
 				agrupar: {default: true},
 				subordinadas: { default: false },
 				lotados_minha_unidade: {default: false},
@@ -120,17 +122,17 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 		this.join = [
 			"unidade.gestor.usuario:id",
 			"documento.assinaturas.usuario:id,nome,url_foto",
-            "documento.assinaturas:id,usuario_id,documento_id",
+      "documento.assinaturas:id,usuario_id,documento_id",
 			"programa:id,nome",
-            "documento:id,numero",
+      "documento:id,numero,titulo,especie,conteudo,tipo",
 			"tipo_modalidade:id,nome",
-			"entregas.plano_entrega_entrega.entrega",
+			"entregas.plano_entrega_entrega.entrega:descricao",
 			"entregas.plano_entrega_entrega.plano_entrega:id,unidade_id",
-			"entregas.plano_entrega_entrega.plano_entrega.unidade",
+			"entregas.plano_entrega_entrega.plano_entrega.unidade:id,sigla",
 			"entregas.entrega",
 			"entregas.reacoes.usuario:id,nome,apelido",
             "unidade.entidade:id,sigla",
-            "unidade:id,sigla,entidade_id,unidade_pai_id",
+            "unidade:id,sigla,entidade_id,unidade_pai_id,data_inativacao",
             "usuario:id,nome,matricula,url_foto",
 		];
 		const INCLUIR_SUBSTITUTO = true;
@@ -218,7 +220,7 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 				)).bind(this),
 		};
 		this.BOTAO_CONSOLIDACOES = {
-			label: "Consolidações",
+			label: "Registro de execução",
 			icon: this.entityService.getIcon("PlanoTrabalhoConsolidacao"),
 			onClick: ((row: PlanoTrabalho) =>
 				this.go.navigate(
@@ -373,22 +375,32 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 
 	public filterValidate = (control: AbstractControl, controlName: string) => {
 		let result = null;
-		if (
-			controlName == "data_filtro_inicio" &&
-			control.value > this.filter?.controls.data_filtro_fim.value
-		) {
-			result = "Maior que fim";
-		} else if (
-			controlName == "data_filtro_fim" &&
-			control.value < this.filter?.controls.data_filtro_inicio.value
-		) {
-			result = "Menor que início";
+		switch (true){
+			case controlName == "data_filtro_inicio" &&
+				control.value > this.filter?.controls.data_filtro_fim.value:
+				result = "Maior que fim";
+				break;
+			case controlName == "data_filtro_fim" &&
+				control.value < this.filter?.controls.data_filtro_inicio.value:
+				result = "Menor que início";
+				break;
+			case controlName == "subordinadas" &&
+				control.value &&
+				!this.filter?.controls.unidade_id.value:
+				result = "Selecione a unidade executora."
+				break;
+			case controlName == "unidade_id" &&
+				this.filter?.controls.subordinadas.value &&
+				!control.value:
+				result = "Selecione a unidade executora."
+				break;
 		}
 		return result;
 	};
 
 	public filterClear(filter: FormGroup) {
 		filter.controls.usuario.setValue("");
+		filter.controls.numero.setValue("");
 		filter.controls.unidade_id.setValue(null);
 		filter.controls.status.setValue(null);
 		filter.controls.arquivados.setValue(false);
@@ -421,6 +433,9 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 				"like",
 				"%" + form.usuario.trim().replace(" ", "%") + "%",
 			]);
+	
+		if (form.numero)
+			result.push(["numero", "==", String(form.numero).trim()]);
 
 		if (this.filter?.controls.meus_planos.value) {
 			let w1: [string, string, string[]] = ["unidade_id", "in", (this.auth.unidades || []).map(u => u.id)];
@@ -465,7 +480,6 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 		}
 
 		if(this.grid) this.grid.groupBy = this.groupBy;
-
 		return result;
 	};
 
@@ -521,10 +535,10 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 			planoTrabalho._metadata?.jaAssinaramTCR
 		);
 		let haAssinaturasFaltantes =
-			!!assinaturasFaltantes.participante.length ||
-			!!assinaturasFaltantes.gestores_unidade_executora.length ||
-			!!assinaturasFaltantes.gestores_unidade_lotacao.length ||
-			!!assinaturasFaltantes.gestores_entidade.length;
+			!!assinaturasFaltantes.participante?.length ||
+			!!assinaturasFaltantes.gestores_unidade_executora?.length ||
+			!!assinaturasFaltantes.gestores_unidade_lotacao?.length ||
+			!!assinaturasFaltantes.gestores_entidade?.length;
 		let usuarioEhGestorUnidadeExecutora = this.unidadeService.isGestorUnidade(
 			planoTrabalho.unidade_id
 		);
@@ -555,7 +569,7 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 			this.planoTrabalhoService.situacaoPlano(planoTrabalho) == "ARQUIVADO";
 		let planoSuspenso =
 			this.planoTrabalhoService.situacaoPlano(planoTrabalho) == "SUSPENSO";
-		let planoPossuiEntrega = planoTrabalho.entregas.length > 0;
+		let planoPossuiEntrega = planoTrabalho.entregas?.length > 0;
 		if (
 			botao == this.BOTAO_INFORMACOES &&
 			this.auth.hasPermissionTo("MOD_PTR")
@@ -585,7 +599,6 @@ export class PlanoTrabalhoListComponent extends PageListBase<
                 - estando com o status 'INCLUIDO' ou 'AGUARDANDO_ASSINATURA', o usuário logado precisa atender os critérios da ação Alterar da TABELA_1;
                 - estando com o status 'ATIVO', o usuário precisa possuir a capacidade MOD_PTR_EDT_ATV e atender os critérios da ação Alterar da TABELA_1;
               - Após alterado, e no caso se exija assinaturas no TCR, o Plano de Trabalho precisa ser repactuado (novo TCR), e o plano retorna ao status 'AGUARDANDO_ASSINATURA';
-              - A alteração não pode apresentar período conflitante com outro plano já existente para a mesma Unidade Executora e mesmo participante, ou o usuário logado possuir a capacidade MOD_PTR_INTSC_DATA (RN_PTR_AA)
             */
 						if (usuarioEhParticipante) {
 							validoTabela1 =
@@ -749,11 +762,13 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 					case this.BOTAO_TERMOS:
 						return this.auth.hasPermissionTo("MOD_PTR");
 					case this.BOTAO_CONSOLIDACOES:
-						return true;
+						return planoAtivo;
 					case this.OPTION_LOGS:
 						return true;
 					case this.BOTAO_CLONAR:
-						return (planoConcluido || planoAvaliado) && this.auth.hasPermissionTo("MOD_PTR_INCL");
+						const inativacao = (planoTrabalho.unidade?.data_inativacao as any);
+						const unidadeAtiva = inativacao === null || inativacao === undefined || inativacao === "";
+						return unidadeAtiva && (!planoAguardandoAssinatura) && this.auth.hasPermissionTo("MOD_PTR_INCL");
 				}
 			}
 		}
@@ -982,4 +997,15 @@ export class PlanoTrabalhoListComponent extends PageListBase<
 
 		//this.grid!.reloadFilter();
 	}
+	
+  public onButtonFilterClick = (filter: FormGroup) => {
+    let form: any = filter.value;
+    let queryOptions = this.grid?.queryOptions || this.queryOptions || {};
+
+    if (this.filter!.valid) {
+      this.grid?.query?.reload(queryOptions);
+    } else {
+      this.filter!.markAllAsTouched(); 
+    }
+  }
 }

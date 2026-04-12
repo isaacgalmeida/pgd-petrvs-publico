@@ -1,7 +1,7 @@
 import { ChangeDetectorRef, Injectable, Injector } from '@angular/core';
 import { Nomenclatura } from '../models/entidade.model';
 import { IIndexable } from '../models/base.model';
-import { AppComponent } from '../app.component';
+import { IAppComponent } from '../app-types';
 
 export type Translate = {
   [index: string]: {
@@ -18,7 +18,7 @@ export class LexicalService {
 
   public PREPOSITIONS_MALE = ["o", "os", "ao", "aos", "do", "dos", "dum", "duns", "no", "nos", "um", "num", "uns", "nuns", "pelo", "pelos"];
   public PREPOSITIONS_FEMALE = ["a", "as", "à", "às", "da", "das", "duma", "dumas", "na", "nas", "uma", "numa", "umas", "numas", "pela", "pelas"];
-  public app?: AppComponent;
+  public app?: IAppComponent;
 
   /* Colocar single e plural em minúsculo (Sempre seguir a ordem Alfabética)
   * ATENÇÃO: os campos single e plural do defaults não deverá ser mudados, pois o código faz referência a eles,
@@ -103,7 +103,8 @@ export class LexicalService {
     "unidade": {single: "unidade", plural: "unidades", female: true},
     "usuario": {single: "usuário", plural: "usuários", female: false},
     "valor institucional": {single: "valor institucional", plural: "valores institucionais", female: false},
-    "tipo de avaliação do registro de execução do plano de trabalho": {single: "Tipo de avaliação do registro de execução do plano de trabalho", plural: "Tipos de avaliações do registro de execução do plano de trabalho", female: false}
+    "tipo de avaliação do registro de execução do plano de trabalho": {single: "Tipo de avaliação do registro de execução do plano de trabalho", plural: "Tipos de avaliações do registro de execução do plano de trabalho", female: false},
+    "histórico de execução": {single: "histórico de execução", plural : "históricos de execução", female : false},
   };
 
   public plurals: IIndexable = {}; // Vetor reverso, contendo os plurais para permitir encontrar a key do vetor defaults pelo plural (melhorar performance)

@@ -40,7 +40,6 @@ class In24_TreinaSeeder extends Seeder
   public $brasilia;
   public $unidades;
   public $entidade;
-  public $utilService;
   public $nivelAcessoService;
 
   public function __construct()
@@ -48,7 +47,6 @@ class In24_TreinaSeeder extends Seeder
     $this->timenow = now();
     $this->brasilia = Cidade::where('codigo_ibge', '5300108')->first();
 
-    $this->utilService = new UtilService();
     $this->nivelAcessoService = new NivelAcessoService();
 
     // Pega a primeira entidade criada no tenant ou cria uma nova
@@ -367,6 +365,17 @@ class In24_TreinaSeeder extends Seeder
         "plano_trabalho_calcula_horas" => 0,
         "atividade_tempo_despendido" => 0,
         "atividade_esforco" => 0,
+      ],
+      [
+        "id" => "0b5c6b9f-6f7a-4d3b-8c2a-2a0c2b3b9a1f",
+        "created_at" => $this->timenow,
+        "updated_at" => $this->timenow,
+        "deleted_at" => NULL,
+        "nome" => "Sem dados do SIAPE",
+        "plano_trabalho_calcula_horas" => 0,
+        "atividade_tempo_despendido" => 0,
+        "atividade_esforco" => 0,
+        "exige_pedagio" => 0,
       ],
     );
 
@@ -756,9 +765,14 @@ class In24_TreinaSeeder extends Seeder
     );
 
     $number = 1;
-    $results = DB::select("CALL sequence_template_numero()");
-    if (!empty($results)) {
-      $number = $results[0]->number;
+    try {
+      $results = DB::select("CALL sequence_template_numero()");
+      if (!empty($results)) {
+        $number = $results[0]->number;
+      }
+    } catch (\Throwable $e) {
+      $max = DB::table('templates')->max('numero');
+      $number = ($max ?? 0) + 1;
     }
 
     $templates = array(

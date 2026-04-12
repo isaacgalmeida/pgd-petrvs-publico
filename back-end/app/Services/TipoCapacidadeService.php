@@ -175,7 +175,6 @@ class TipoCapacidadeService extends ServiceBase
         ["MOD_PTR_EDT_ATV", "Permite editar planos de trabalho ativos"],
         ["MOD_PTR_CNC", "Permite cancelar planos de trabalho"],
         ["MOD_PTR_USERS_INCL",   "Permite incluir planos de trabalho para usuários que não estão lotados nas áreas de trabalho do usuário logado"],
-        ["MOD_PTR_INTSC_DATA", "Permite incluir planos de trabalho que possuam períodos conflitantes com outro plano já existente na mesma unidade executora"]
       ]
     ], [
       "codigo" => "MOD_PTR_ENTR",
@@ -244,6 +243,7 @@ class TipoCapacidadeService extends ServiceBase
         ["MOD_PRGT_EXCL", "Permite excluir programas de gestão"],
         ["MOD_PRGT_INCL", "Permite incluir programas de gestão"],
         ["MOD_PRGT_CONCL", "Permite concluir programas de gestão"],
+        ["MOD_PRGT_VER_TODOS", "Permite visualizar todos os programas, independente da hierarquia de unidades"]
       ]
     ], [
       "codigo" => "MOD_PART",
@@ -390,6 +390,7 @@ class TipoCapacidadeService extends ServiceBase
         ["MOD_USER_TUDO", "Permite consultar qualquer usuário independente de lotação"],
         ["MOD_USER_ATRIB", "Permite gerenciar atribuições de usuário"],
         ["MOD_USER_REATIVAR", "Permite reativar usuário"],
+        ["MOD_USER_LIST_ALL", "Permite listar todos os usuários"],
       ]
     ], [
       "codigo" => "MOD_AUDIT",
@@ -416,12 +417,26 @@ class TipoCapacidadeService extends ServiceBase
       ]
     ],
     [
+        "codigo" => "MOD_INDICADORES",
+        "descricao" => "Módulo de Indicadores",
+        "capacidades" => [
+            ["MOD_IND_ENTREGAS", "Indicadores de Entregas"],
+            ["MOD_IND_EQUIPES", "Indicadores de Equipes"],
+            ["MOD_IND_GESTAO", "Indicadores de Gestão do PGD"],
+            ["MOD_IND_TODAS_UNIDADES", "Indicadores - Listar todas as unidades"],
+            ["MOD_IND_VINCULADAS", "Indicadores - Permite usuário filtrar por todas as unidades vinculadas"],
+        ]
+    ],
+    [
         "codigo" => "MOD_RELATORIOS",
         "descricao" => "Módulo de Relatórios",
     ],
     [
         "codigo" => "MOD_RELATORIO_PT",
         "descricao" => "Relatório de Planos de Trabalho",
+        "capacidades" => [
+            ["MOD_RELATORIO_PT_UNIDADES_VINCULADAS", "Relatório de Planos de Trabalho - Permite usuário filtrar por todas as unidades vinculadas" ]
+        ]
     ],
     [
         "codigo" => "MOD_RELATORIO_PT_TODAS_UNIDADES",
@@ -430,6 +445,9 @@ class TipoCapacidadeService extends ServiceBase
     [
         "codigo" => "MOD_RELATORIO_PE",
         "descricao" => "Relatório de Planos de Entrega",
+        "capacidades" => [
+            ["MOD_RELATORIO_PE_UNIDADES_VINCULADAS", "Relatório de Planos de Entrega - Permite usuário filtrar por todas as unidades vinculadas" ]
+        ]
     ],
     [
         "codigo" => "MOD_RELATORIO_PE_TODAS_UNIDADES",
@@ -438,6 +456,9 @@ class TipoCapacidadeService extends ServiceBase
     [
         "codigo" => "MOD_RELATORIO_USUARIO",
         "descricao" => "Relatório de Agentes Públicos",
+        "capacidades" => [
+            ["MOD_RELATORIO_USUARIO_UNIDADES_VINCULADAS", "Relatório de Agentes Públicos - Permite usuário filtrar por todas as unidades vinculadas" ]
+        ]
     ],
     [
         "codigo" => "MOD_RELATORIO_USUARIO_TODAS_UNIDADES",
@@ -446,6 +467,9 @@ class TipoCapacidadeService extends ServiceBase
     [
         "codigo" => "MOD_RELATORIO_UNIDADE",
         "descricao" => "Relatório de Unidades",
+         "capacidades" => [
+            ["MOD_RELATORIO_UNIDADE_UNIDADES_VINCULADAS", "Relatório de Unidades - Permite usuário filtrar por todas as unidades vinculadas" ]
+        ]
     ],
     [
         "codigo" => "MOD_RELATORIO_UNIDADE_TODAS_UNIDADES",

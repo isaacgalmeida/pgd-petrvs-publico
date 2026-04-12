@@ -1,66 +1,49 @@
-import { ChangeDetectorRef, Component, Inject, Injector, ViewChild, ViewContainerRef } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
-import { ToolbarButton } from './components/toolbar/toolbar.component';
-import { ListenerAllPagesService } from './listeners/listener-all-pages.service';
-import { AuthService } from './services/auth.service';
+import { ChangeDetectorRef, Component, Injector, ViewChild, ViewContainerRef } from '@angular/core';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
+import { filter } from 'rxjs/operators';
+import { ToolbarButton } from './components/toolbar/toolbar-types';
+import { AuthService, UnidadeVinculada } from './services/auth.service';
 import { DialogService } from './services/dialog.service';
 import { DialogComponent } from './services/dialog/dialog.component';
 import { GlobalsService } from './services/globals.service';
 import { LexicalService } from './services/lexical.service';
-import { NavigateService, RouteMetadata } from './services/navigate.service';
+import { NavigateService } from './services/navigate.service';
 import { UtilService } from './services/util.service';
 import { LookupService } from './services/lookup.service';
 import { EntityService } from './services/entity.service';
 import { NotificacaoService } from './modules/uteis/notificacoes/notificacao.service';
-import { DOCUMENT } from '@angular/common';
 import { SafeUrl } from '@angular/platform-browser';
 import { UnidadeService } from './services/unidade.service';
 import { Unidade } from './models/unidade.model';
+import { SiapeBlacklistServidorDaoService } from './dao/siape-blacklist-servidor-dao.service';
+import { SiapeBlacklistServidor } from './models/siape-blacklist-servidor.model';
+import { IntegranteService } from './services/integrante.service';
+import { Contexto, IAppComponent, MenuContexto, MenuSchema, MenuItem, PetrvsModule, Schema } from './app-types';
 
-export type Contexto = "EXECUCAO" | "GESTAO" | "ADMINISTRADOR" | "DEV" | "PONTO" | "PROJETO" | "RAIOX" ;
-export type Schema = {
-  name: string,
-  permition?: string,
-  route?: string[],
-  metadata?: RouteMetadata,
-  params?: any,
-  icon: string;
-  onClick?: () => void;
-};
-export type MenuSchema = { [key: string]: Schema };
-export type MenuItem = {
-  name: string,
-  permition?: string,
-  id: string,
-  menu: Schema[]
-} | Schema;
+export { Contexto, MenuContexto, MenuSchema, MenuItem, PetrvsModule, Schema };
 
-export type PetrvsModule = {
-  name: string,
-  icon: string
+declare global {
+  interface Window {
+    clarity: any;
+  }
 }
-export type MenuContexto = {
-  key: Contexto,
-  permition?: string,
-  icon: string,
-  name: string,
-  menu?: MenuItem[],
-  petrvsModule?: string
-};
+
+declare var bootstrap: any;
 
 @Component({
-  selector: 'app-root',
-  templateUrl: './app.component.html',
-  styleUrls: ['./app.component.scss'],
-  providers: [{
-    provide: 'ID_GENERATOR_BASE',
-    useFactory: (self: AppComponent, go: NavigateService, util: UtilService) => {
-      return util.onlyAlphanumeric(go.getRouteUrl());
-    },
-    deps: [AppComponent, NavigateService, UtilService]
-  }]
+    selector: 'app-root',
+    templateUrl: './app.component.html',
+    styleUrls: ['./app.component.scss'],
+    providers: [{
+            provide: 'ID_GENERATOR_BASE',
+            useFactory: (self: AppComponent, go: NavigateService, util: UtilService) => {
+                return util.onlyAlphanumeric(go.getRouteUrl());
+            },
+            deps: [AppComponent, NavigateService, UtilService]
+        }],
+    standalone: false
 })
-export class AppComponent {
+export class AppComponent implements IAppComponent {
   @ViewChild('dialogs', { read: ViewContainerRef }) dialogs?: ViewContainerRef;
 
   public static instance: AppComponent;
@@ -77,11 +60,12 @@ export class AppComponent {
   public router: Router;
   public route: ActivatedRoute;
   public go: NavigateService;
-  public allPages: ListenerAllPagesService;
   public utils: UtilService;
   public lookup: LookupService;
   public entity: EntityService;
   public notificacao: NotificacaoService;
+  public siapeBlacklistDao: SiapeBlacklistServidorDaoService;
+  public integranteService: IntegranteService;
   public menuSchema: MenuSchema = {};
   public menuToolbar: any[] = [];
   public menuContexto: MenuContexto[] = [];
@@ -95,8 +79,9 @@ export class AppComponent {
   public moduloDev: any;
   public moduloSiape: any;
   public unidadeService: UnidadeService;
-  private _menu: any;
-  private _menuDetectChanges: any;
+  public siapeBlacklistRows: SiapeBlacklistServidor[] = [];
+  public siapeBlacklistMatriculas: string[] = [];
+  public tooltipWarning: string = 'Matrícula em processo de inativação';
 
   constructor(public injector: Injector) {
     /* Instancia singleton da aplicação */
@@ -110,12 +95,13 @@ export class AppComponent {
     this.router = injector.get<Router>(Router);
     this.route = injector.get<ActivatedRoute>(ActivatedRoute);
     this.go = injector.get<NavigateService>(NavigateService);
-    this.allPages = injector.get<ListenerAllPagesService>(ListenerAllPagesService);
     this.utils = injector.get<UtilService>(UtilService);
     this.lookup = injector.get<LookupService>(LookupService);
     this.entity = injector.get<EntityService>(EntityService);
     this.notificacao = injector.get<NotificacaoService>(NotificacaoService);
     this.unidadeService = injector.get<UnidadeService>(UnidadeService);
+    this.siapeBlacklistDao = injector.get<SiapeBlacklistServidorDaoService>(SiapeBlacklistServidorDaoService);
+    this.integranteService = injector.get<IntegranteService>(IntegranteService);
     /* Inicializações */
     this.notificacao.heartbeat();
     this.auth.app = this;
@@ -127,7 +113,12 @@ export class AppComponent {
 
     this.lex.cdRef = this.cdRef;
     /* Definição do menu do sistema */
-    this.setMenuVars();
+    this.setMenuVars();  
+
+    this.router.events.pipe(filter(event => event instanceof NavigationEnd))
+      .subscribe((event: any) => {
+        (window as any).clarity?.('set', 'page', event.urlAfterRedirects);
+    });
   }
 
   public setMenuVars() {
@@ -138,7 +129,6 @@ export class AppComponent {
       EIXOS_TEMATICOS: { name: this.lex.translate("Eixos Temáticos"), permition: 'MOD_EXTM', route: ['cadastros', 'eixo-tematico'], icon: this.entity.getIcon('EixoTematico') },
       // ENTREGAS: { name: this.lex.translate("Modelos de Entregas"), permition: 'MOD_ENTRG', route: ['cadastros', 'entrega'], icon: this.entity.getIcon('Entrega') },
       FERIADOS: { name: this.lex.translate("Feriados"), permition: 'MOD_FER', route: ['cadastros', 'feriado'], icon: this.entity.getIcon('Feriado') },
-      MATERIAIS_SERVICOS: { name: this.lex.translate("Materiais e Serviços"), permition: '', route: ['cadastros', 'material-servico'], icon: this.entity.getIcon('MaterialServico') },
       TEMPLATES: { name: this.lex.translate("Templates"), permition: 'MOD_TEMP', route: ['cadastros', 'templates'], icon: this.entity.getIcon('Template'), params: { modo: "listagem" } },
       TIPOS_TAREFAS: { name: this.lex.translate("Tipos de Tarefas"), permition: 'MOD_TIPO_TRF', route: ['cadastros', 'tipo-tarefa'], icon: this.entity.getIcon('TipoTarefa') },
       TIPOS_ATIVIDADES: { name: this.lex.translate("Tipos de Atividades"), permition: 'MOD_TIPO_ATV', route: ['cadastros', 'tipo-atividade'], icon: this.entity.getIcon('TipoAtividade') },
@@ -155,13 +145,12 @@ export class AppComponent {
       CADEIAS_VALORES: { name: this.lex.translate("Cadeias de Valores"), permition: 'MOD_CADV', route: ['gestao', 'cadeia-valor'], icon: this.entity.getIcon('CadeiaValor') },
       ATIVIDADES: { name: this.lex.translate("Atividades"), permition: 'MOD_ATV', route: ['gestao', 'atividade'], icon: this.entity.getIcon('Atividade') },
       PLANEJAMENTOS_INSTITUCIONAIS: { name: this.lex.translate("Planejamentos Institucionais"), permition: 'MOD_PLAN_INST', route: ['gestao', 'planejamento'], icon: this.entity.getIcon('Planejamento') },
-      PLANOS_ENTREGAS: { name: this.lex.translate("Planos de Entregas"), permition: 'MOD_PENT', route: ['gestao', 'plano-entrega'], icon: this.entity.getIcon('PlanoEntrega') },
+      PLANOS_ENTREGAS: { name: this.lex.translate("Planos de Entregas"), permition: 'MOD_PENT', route: ['gestao', 'plano-entrega'], icon: this.entity.getIcon('PlanoEntrega'), params: { planejamento: true } },
       PLANOS_TRABALHOS: { name: this.lex.translate("Planos de Trabalho"), permition: 'MOD_PTR', route: ['gestao', 'plano-trabalho'], icon: this.entity.getIcon('PlanoTrabalho') },
       CONSOLIDACOES: { name: this.lex.translate("Consolidações"), permition: 'MOD_PTR_CSLD', route: ['gestao', 'plano-trabalho', 'consolidacao'], icon: this.entity.getIcon('PlanoTrabalhoConsolidacao') },
       PROGRAMAS_GESTAO: { name: this.lex.translate("Programas de Gestão"), permition: 'MOD_PRGT', route: ['gestao', 'programa'], icon: this.entity.getIcon('Programa') },
       HABILITACOES_PROGRAMA: { name: this.lex.translate("Habilitações"), permition: 'MOD_PART', route: ['gestao', 'programa', 'participantes'], icon: this.entity.getIcon('Programa') },
       PORTIFOLIOS: { name: this.lex.translate("Portifólios"), permition: 'MOD_PROJ', route: ['gestao', 'projeto'], icon: this.entity.getIcon('Projeto') },
-      PROJETOS: { name: this.lex.translate("Projetos"), permition: 'MOD_PROJ', route: ['gestao', 'projeto'], icon: this.entity.getIcon('Projeto') },
       PRODUTOS: { name: this.lex.translate("Produtos e Serviços"), permition: 'MOD_PROD', route: ['gestao', 'produto'], icon: this.entity.getIcon('Projeto') }, // TODO : retornar esse menu ao subir produtos
       SOLUCOES: { name: this.lex.translate("Soluções"), permition: 'MOD_SOLUCOES', route: ['gestao', 'solucao'], icon: this.entity.getIcon('Solucao') }, // TODO : retornar esse menu ao subir produtos
       /* Execucao */
@@ -184,7 +173,8 @@ export class AppComponent {
       LOGS_ALTERACOES: { name: "Log das Alterações", permition: '', route: ['logs', 'change'], icon: this.entity.getIcon('Change') },
       LOGS_ERROS: { name: "Log dos Erros", permition: '', route: ['logs', 'error'], icon: this.entity.getIcon('Error') },
       LOGS_TRAFEGOS: { name: "Log do Tráfego", permition: '', route: ['logs', 'traffic'], icon: this.entity.getIcon('Traffic') },
-      TESTE_IMPERSONATE: { name: "Teste IMPERSONATE", permition: '', route: ['impersonate'], icon: this.entity.getIcon('Teste') },
+      LOGS_SYSTEM: { name: "Logs do Sistema", permition: '', route: ['logs', 'system-logs'], icon: 'bi bi-file-earmark-text' },
+      TESTE_IMPERSONATE: { name: "IMPERSONATE", permition: '', route: ['impersonate'], icon: this.entity.getIcon('Teste') },
       DEV_CPF_CONSULTA_SIAPE: { name: "Consulta CPF SIAPE", permition: '', route: ['consultas', 'cpf-siape'], icon: this.entity.getIcon('ConsultaCPFSIAPE') },
       DEV_UNIDADE_CONSULTA_SIAPE: { name: "Consulta Unidade SIAPE", permition: '', route: ['consultas', 'unidade-siape'], icon: this.entity.getIcon('ConsultaUnidadeSIAPE') },
       ENVIO_LOGS: { name: "Log dos Envios", permition: '', route: ['logs', 'envios'], icon: 'bi-list-check' },
@@ -192,6 +182,7 @@ export class AppComponent {
       ENVIO_REINICIAR: { name: "Resetar Envios", permition: '', route: ['envios', 'reiniciar'], icon: 'bi-arrow-clockwise' },
       /* SIAPE */
       BLACKLIST_SERVIDOR: { name: "CPFs indisponíveis", permition: '', route: ['siape', 'blacklist-servidor'], icon: 'bi bi-person-x' },
+      BLACKLIST_UNIDADE: { name: "Unidades indisponíveis", permition: '', route: ['siape', 'blacklist-unidade'], icon: 'bi bi-building-dash' },
             /* RELATORIOS */
       RELATORIO_PLANO_TRABALHO: {
         name: this.lex.translate("Planos de Trabalho"),
@@ -217,6 +208,24 @@ export class AppComponent {
         icon: this.entity.getIcon('Unidade'),
         route: ['relatorios', 'unidades'],
         //onClick: ()=> this.emDesenvolvimento()
+      },
+      INDICADORES_ENTREGAS: {
+        name: "Entregas",
+        //permition: 'MOD_IND_ENTREGAS',
+        icon: this.entity.getIcon('PlanoEntrega'),
+        route: ['relatorios', 'indicadores', 'entregas'],
+      },
+      INDICADORES_EQUIPES: {
+        name: "Equipes",
+        // permition: 'MOD_IND_EQUIPES',
+        icon: this.entity.getIcon('Usuario'),
+        route: ['relatorios', 'indicadores', 'equipes'],
+      },
+      INDICADORES_GESTAO: {
+        name: "Gestão do PGD",
+        // permition: 'MOD_IND_GESTAO',
+        icon: this.entity.getIcon('Unidade'),
+        route: ['relatorios', 'indicadores', 'gestao'],
       },
       /* Outros */
       PAINEL: { name: "Painel", permition: '', route: ['panel'], icon: "" },
@@ -293,6 +302,14 @@ export class AppComponent {
         this.menuSchema.RELATORIO_USUARIOS,
         this.menuSchema.RELATORIO_UNIDADES
       ].sort(this.orderMenu)
+    }, {
+      name: this.lex.translate("Indicadores"),
+      id: "navbarDropdownIndicadores",
+      menu: [
+        this.menuSchema.INDICADORES_ENTREGAS,
+        this.menuSchema.INDICADORES_EQUIPES,
+        this.menuSchema.INDICADORES_GESTAO
+      ].sort(this.orderMenu)
     }];
 
     this.moduloExecucao = [
@@ -307,6 +324,14 @@ export class AppComponent {
         id: "navbarDropdownRelatorios",
         menu: [
           this.menuSchema.RELATORIO_USUARIOS
+        ].sort(this.orderMenu)
+      }, {
+        name: this.lex.translate("Indicadores"),
+        id: "navbarDropdownIndicadores",
+        menu: [
+          this.menuSchema.INDICADORES_ENTREGAS,
+          this.menuSchema.INDICADORES_EQUIPES,
+          this.menuSchema.INDICADORES_GESTAO
         ].sort(this.orderMenu)
       }
     ];
@@ -354,6 +379,14 @@ export class AppComponent {
         this.menuSchema.RELATORIO_USUARIOS,
         this.menuSchema.RELATORIO_UNIDADES
       ].sort(this.orderMenu)
+    }, {
+      name: this.lex.translate("Indicadores"),
+      id: "navbarDropdownIndicadores",
+      menu: [
+        this.menuSchema.INDICADORES_ENTREGAS,
+        this.menuSchema.INDICADORES_EQUIPES,
+        this.menuSchema.INDICADORES_GESTAO
+      ].sort(this.orderMenu)
     }];
 
     this.moduloDev = [{
@@ -371,7 +404,8 @@ export class AppComponent {
       menu: [
         this.menuSchema.LOGS_ALTERACOES,
         this.menuSchema.LOGS_ERROS,
-        this.menuSchema.LOGS_TRAFEGOS
+        this.menuSchema.LOGS_TRAFEGOS,
+        this.menuSchema.LOGS_SYSTEM
       ]
     }, {
       name: this.lex.translate("Testes"),
@@ -387,7 +421,8 @@ export class AppComponent {
       menu: [
         this.menuSchema.DEV_CPF_CONSULTA_SIAPE,
         this.menuSchema.DEV_UNIDADE_CONSULTA_SIAPE,
-        this.menuSchema.BLACKLIST_SERVIDOR
+        this.menuSchema.BLACKLIST_SERVIDOR,
+        this.menuSchema.BLACKLIST_UNIDADE
       ]
     }, {
       name: this.lex.translate("Envio API"),
@@ -400,15 +435,12 @@ export class AppComponent {
       ]
     }];
 
-    
-
     this.menuContexto = [
       { key: "GESTAO", permition: "CTXT_GEST", icon: "bi bi-clipboard-data", name: this.lex.translate("PGD"), menu: this.moduloGestao },
       { key: "EXECUCAO", permition: "CTXT_EXEC", icon: "bi bi-clipboard-data", name: this.lex.translate("PGD"), menu: this.moduloExecucao },
       { key: "ADMINISTRADOR", permition: "CTXT_ADM", icon: "bi bi-emoji-sunglasses", name: this.lex.translate("Administrador"), menu: this.moduloAdministrador },
       { key: "DEV", permition: "CTXT_DEV", icon: "bi bi-braces", name: this.lex.translate("Desenvolvedor"), menu: this.moduloDev },
     ]
-
   }
 
   public orderMenu(a: any, b: any) {
@@ -451,7 +483,6 @@ export class AppComponent {
 
   public menuItemClass(baseClass: string, item: any) {
     let routeUrl = this.go.getRouteUrl().replace(/^\//, "");
-    if (item.menu?.find((x: any) => !x)) console.log(item);
     return baseClass + (item.route?.join("/") == routeUrl || item.menu?.find((x: any) => x?.route?.join("/") == routeUrl) ? " fw-bold" : "");
   }
 
@@ -471,7 +502,7 @@ export class AppComponent {
     return this.auth.unidades || [];
   }
 
-  public get unidadesVinculadas(): Unidade[] {
+  public get unidadesVinculadas(): UnidadeVinculada[] {
     return this.auth.unidadesVinculadas || [];
   }
 
@@ -496,19 +527,10 @@ export class AppComponent {
     popup.restore();
   }
 
-  public async selecionaUnidade(id: string, matricula: string) {
-    const matriculaAnterior = this.auth.usuario?.matricula;
-    
+  public async selecionaUnidade(id: string, matricula?: string | null) {
+    if (!matricula) return;
     await this.auth.selecionaUnidade(id, matricula, this.cdRef);
-    
-    if (matricula && matricula !== matriculaAnterior) {
-      window.location.reload();
-    }
-  }
-
-  public getMatriculaPelaUnidadeComCpf(idUnidade: string, cpf: string): string {
-    let matricula = this.auth.usuario?.matriculas?.find(x => x.unidades?.find(y => y.id == idUnidade) && x.cpf == cpf);
-    return matricula?.matricula || 'N/A';
+    window.location.reload();
   }
 
   public async onToolbarButtonClick(btn: ToolbarButton) {

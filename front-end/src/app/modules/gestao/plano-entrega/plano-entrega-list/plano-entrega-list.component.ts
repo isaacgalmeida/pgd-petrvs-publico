@@ -1,7 +1,7 @@
 import {Component, Injector, ViewChild} from "@angular/core";
 import {AbstractControl, FormGroup} from "@angular/forms";
 import {GridComponent} from "src/app/components/grid/grid.component";
-import {ToolbarButton} from "src/app/components/toolbar/toolbar.component";
+import { ToolbarButton } from "src/app/components/toolbar/toolbar-types";
 import {CadeiaValorDaoService} from "src/app/dao/cadeia-valor-dao.service";
 import {PlanejamentoDaoService} from "src/app/dao/planejamento-dao.service";
 import {PlanoEntregaDaoService} from "src/app/dao/plano-entrega-dao.service";
@@ -20,9 +20,10 @@ import {UnidadeService} from "src/app/services/unidade.service";
 import {ProgramaService} from "src/app/services/programa.service";
 
 @Component({
-	selector: "plano-entrega-list",
-	templateUrl: "./plano-entrega-list.component.html",
-	styleUrls: ["./plano-entrega-list.component.scss"],
+    selector: "plano-entrega-list",
+    templateUrl: "./plano-entrega-list.component.html",
+    styleUrls: ["./plano-entrega-list.component.scss"],
+    standalone: false
 })
 export class PlanoEntregaListComponent extends PageListBase<
 	PlanoEntrega,
@@ -33,6 +34,7 @@ export class PlanoEntregaListComponent extends PageListBase<
 	public showFilter: boolean = true;
 	public avaliacao: boolean = false;
 	public execucao: boolean = false;
+	public planejamento: boolean = false;
 	public linha?: PlanoEntrega;
 	public unidadeDao: UnidadeDaoService;
 	public avaliacaoDao: AvaliacaoDaoService;
@@ -113,9 +115,9 @@ export class PlanoEntregaListComponent extends PageListBase<
 		);
 		this.join = [
 			"planejamento:id,nome",
-			"programa:id,nome",
+			"programa:id,nome,data_inicio,data_fim",
 			"cadeia_valor:id,nome",
-			"unidade:id,sigla,path",
+			"unidade:id,sigla,path,data_inativacao,instituidora,unidade_pai_id",
 			"entregas.entrega",
 			"entregas.objetivos.objetivo",
 			"entregas.processos.processo",
@@ -346,6 +348,7 @@ export class PlanoEntregaListComponent extends PageListBase<
 		super.ngOnInit();
 		this.execucao = !!this.queryParams?.execucao;
 		this.avaliacao = !!this.queryParams?.avaliacao;
+		this.planejamento = !!this.queryParams?.planejamento;
 		this.showFilter =
 			typeof this.queryParams?.showFilter != "undefined"
 				? this.queryParams.showFilter == "true"
@@ -544,13 +547,19 @@ export class PlanoEntregaListComponent extends PageListBase<
 		if (form.cadeia_valor_id)
 			result.push(["cadeia_valor_id", "==", form.cadeia_valor_id]);
 		if (this.isModal) {
-			result.push(["status", "==", "ATIVO"]);
-		} else if (form.status || this.avaliacao) {
-			result.push([
-				"status",
-				"in",
-				form.status ? [form.status] : ["CONCLUIDO", "AVALIADO"],
-			]);
+			result.push(["status", "in", ["ATIVO", "CONCLUIDO", "AVALIADO"]]);
+		} else if (form.status || this.avaliacao || this.planejamento || this.execucao) {
+			const status : string[] = []
+			if (this.planejamento) status.push('INCLUIDO', 'HOMOLOGANDO', 'ATIVO')
+			if (this.execucao) status.push('ATIVO', 'CONCLUIDO')
+			if (this.avaliacao) status.push('CONCLUIDO', 'AVALIADO')
+			if (form.status != 'TODOS' && (form.status || !!status.length)) {
+				result.push([
+					"status",
+					"in",
+					form.status ? [form.status] : status,
+				]);
+			}
 		}
 
 		//  (RI_PENT_C) Por padrão, os planos de entregas retornados na listagem do grid são os que não foram arquivados.
@@ -598,6 +607,11 @@ export class PlanoEntregaListComponent extends PageListBase<
 	public dynamicButtons(row: PlanoEntrega): ToolbarButton[] {
 		let result: ToolbarButton[] = [];
 		let planoEntrega: PlanoEntrega = row as PlanoEntrega;
+		const dataInativacao = row.unidade?.data_inativacao as any;
+		const unidadeAtiva = dataInativacao != null && dataInativacao !== "";
+		if (unidadeAtiva) {
+			return [this.BOTAO_CONSULTAR];
+		}
 		switch (this.planoEntregaService.situacaoPlano(planoEntrega)) {
 			case "INCLUIDO":
 				if (this.botaoAtendeCondicoes(this.BOTAO_LIBERAR_HOMOLOGACAO, row))
@@ -642,7 +656,10 @@ export class PlanoEntregaListComponent extends PageListBase<
 	public dynamicOptions(row: PlanoEntrega): ToolbarButton[] {
 		let result: ToolbarButton[] = [];
 		this.linha = row;
-		this.botoes.forEach((botao) => {
+		const dataInativacao = row.unidade?.data_inativacao as any;
+		const unidadeAtiva = dataInativacao != null && dataInativacao !== "";
+		const base = unidadeAtiva ? [this.BOTAO_LOGS, this.BOTAO_CONSULTAR] : this.botoes;
+		base.forEach((botao) => {
 			if (this.botaoAtendeCondicoes(botao, row)) result.push(botao);
 		});
 		return result;
@@ -705,7 +722,7 @@ export class PlanoEntregaListComponent extends PageListBase<
 						  )) && this.auth.hasPermissionTo("MOD_PENT_EDT_FLH");
 				let condicao3 = this.auth.isIntegrante(
 					"HOMOLOGADOR_PLANO_ENTREGA",
-					planoEntrega.unidade!.unidade_pai_id!
+					planoEntrega.unidade?.unidade_pai_id!
 				);
 				let condicao4 =
 					this.planoEntregaService.situacaoPlano(planoEntrega) == "ATIVO" &&
@@ -730,7 +747,7 @@ export class PlanoEntregaListComponent extends PageListBase<
             - a Unidade do plano (Unidade B) precisa ser a Unidade de lotação do usuário logado e ele possuir a capacidade "MOD_PENT_ARQ";
         */
 				return (
-					["CONCLUIDO", "AVALIADO"].includes(
+					["CONCLUIDO", "AVALIADO", "CANCELADO"].includes(
 						this.planoEntregaService.situacaoPlano(planoEntrega)
 					) &&
 					(this.unidadeService.isGestorUnidade(planoEntrega.unidade) ||
@@ -747,6 +764,7 @@ export class PlanoEntregaListComponent extends PageListBase<
               - o usuário logado precisa ser gestor de alguma Unidade da linha hierárquica ascendente da Unidade do plano (Unidade A e superiores), e possuir a capacidade "MOD_PENT_AVAL_SUBORD";
               - sugerir arquivamento automático (vide RI_PENT_A); 
         */
+				if (!this.avaliacao) return false;
 				let condic1 =
 					planoEntrega.unidade?.instituidora == 1
 						? this.unidadeService.isGestorUnidade(planoEntrega.unidade?.id)
@@ -780,7 +798,7 @@ export class PlanoEntregaListComponent extends PageListBase<
 						  ) ||
 						  this.auth.isIntegrante(
 								"AVALIADOR_PLANO_ENTREGA",
-								planoEntrega.unidade!.id!
+								planoEntrega.unidade?.id!
 						  ))
 				);
 			case this.BOTAO_CANCELAR_CONCLUSAO:
@@ -844,6 +862,7 @@ export class PlanoEntregaListComponent extends PageListBase<
         */
 				return (
 					this.planoEntregaService.situacaoPlano(planoEntrega) == "ATIVO" &&
+					this.execucao &&
 					(this.unidadeService.isGestorUnidade(planoEntrega.unidade) ||
 						(this.auth.isLotacaoUsuario(planoEntrega.unidade) &&
 							this.auth.hasPermissionTo("MOD_PENT_CONC")))
@@ -901,11 +920,11 @@ export class PlanoEntregaListComponent extends PageListBase<
 								planoEntrega.unidade?.unidade_pai_id
 						  );
 				let condition3 =
-					this.auth.isLotacaoUsuario(planoEntrega.unidade!.unidade_pai) &&
+					this.auth.isLotacaoUsuario(planoEntrega.unidade?.unidade_pai) &&
 					this.auth.hasPermissionTo("MOD_PENT_HOMOL");
 				let condition4 = this.auth.isIntegrante(
 					"HOMOLOGADOR_PLANO_ENTREGA",
-					planoEntrega.unidade!.unidade_pai_id!
+					planoEntrega.unidade?.unidade_pai_id!
 				);
 				return (
 					!this.execucao &&
@@ -981,11 +1000,15 @@ export class PlanoEntregaListComponent extends PageListBase<
 						this.auth.isGestorLinhaAscendente(planoEntrega.unidade!))
 				);
 			case this.BOTAO_CLONAR:
+				const unidadeAtiva =
+					!planoEntrega.unidade?.data_inativacao ||
+					planoEntrega.unidade?.data_inativacao === ("" as any);
 				return (
 					this.auth.hasPermissionTo("MOD_PENT_INCL") &&
-					["CONCLUIDO", "AVALIADO"].includes(
+					!["HOMOLOGANDO"].includes(
 						this.planoEntregaService.situacaoPlano(planoEntrega)
-					)
+					) &&
+					unidadeAtiva
 				);
 		}
 		return false;
@@ -1326,5 +1349,32 @@ export class PlanoEntregaListComponent extends PageListBase<
 		/*
     - (RN_PENT_Z) ... O usuário logado precisa possuir a capacidade "MOD_PENT_INCL"
      */
+	}
+
+	protected statusLabel(planoEntrega: PlanoEntrega) : string {
+		const isAvaliacao = this.queryParams.avaliacao
+		const ativoLabel = () => {
+			if (this.planejamento) return "Homologado"
+			return planoEntrega.has_progresso ? "Incluído" : "Aguardando Registro"
+		}
+		const statusLabelMap: Record<string, string | null | undefined> = {
+			'ATIVO': ativoLabel(),
+			'CONCLUIDO': isAvaliacao ? 'Aguardando Avaliação' : null
+		}
+		return statusLabelMap[planoEntrega.status] ?? this.lookup.getValue(this.lookup.PLANO_ENTREGA_STATUS, planoEntrega.status)
+	}
+
+	protected statusColor(planoEntrega: PlanoEntrega) : string {
+		const statusColorMap: Record<string, string | null | undefined> = {
+			"ATIVO" : planoEntrega.has_progresso || this.planejamento ? "ATIVO" : "INCLUIDO"
+		}
+		return this.lookup.getColor(this.lookup.PLANO_ENTREGA_STATUS, statusColorMap[planoEntrega.status] ?? planoEntrega.status)
+	}
+
+	protected statusIcon(planoEntrega: PlanoEntrega) : string {
+		const statusIconMap: Record<string, string | null | undefined> = {
+			"ATIVO" : planoEntrega.has_progresso || this.planejamento ? "ATIVO" : "HOMOLOGANDO"
+		}
+		return this.lookup.getIcon(this.lookup.PLANO_ENTREGA_STATUS, statusIconMap[planoEntrega.status] ?? planoEntrega.status )
 	}
 }

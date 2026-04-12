@@ -12,7 +12,7 @@ import {
 } from "@angular/core";
 import {AbstractControl, FormGroup, FormGroupDirective} from "@angular/forms";
 import {Observable, Subject, of, takeUntil} from "rxjs";
-import {DaoBaseService, QueryOrderBy} from "src/app/dao/dao-base.service";
+import {DaoBaseService, queryEvents, QueryOrderBy} from "src/app/dao/dao-base.service";
 import {QueryContext} from "src/app/dao/query-context";
 import {QueryOptions} from "src/app/dao/query-options";
 import {Base, IIndexable} from "src/app/models/base.model";
@@ -24,7 +24,8 @@ import {
 	RouteMetadata,
 } from "src/app/services/navigate.service";
 import {ComponentBase} from "../component-base";
-import {ToolbarButton, ToolbarComponent} from "../toolbar/toolbar.component";
+import {ToolbarComponent} from "../toolbar/toolbar.component";
+import {ToolbarButton} from "../toolbar/toolbar-types";
 import {ColumnsComponent} from "./columns/columns.component";
 import {FilterComponent} from "./filter/filter.component";
 import {GridColumn} from "./grid-column";
@@ -32,32 +33,26 @@ import {PaginationComponent} from "./pagination/pagination.component";
 import {SidePanelComponent} from "./side-panel/side-panel.component";
 import {LookupItem} from "src/app/services/lookup.service";
 import {TemplateDaoService} from "src/app/dao/template-dao.service";
-import {DocumentoService} from "src/app/modules/uteis/documentos/documento.service";
+import { DocumentoService } from "src/app/modules/uteis/documentos/documento.service";
 import { HeaderGroupsComponent } from "./header-groups/header-groups.component";
+import { GroupBy, GridGroupSeparator } from "./grid-types";
 
-export type GroupBy = {field: string; label: string; value?: any};
 declare var bootstrap: any;
-export class GridGroupSeparator {
-	constructor(public group: GroupBy[]) {}
-	public metadata: any = undefined;
-	public get text(): string {
-		return this.group.map((x) => x.value).join(" - ");
-	}
-}
 
 @Component({
-	selector: "grid",
-	templateUrl: "./grid.component.html",
-	styleUrls: ["./grid.component.scss"],
-	providers: [
-		{
-			provide: FormGroupDirective,
-			useFactory: (self: GridComponent) => {
-				return self.formDirective!;
-			},
-			deps: [GridComponent],
-		},
-	],
+    selector: "grid",
+    templateUrl: "./grid.component.html",
+    styleUrls: ["./grid.component.scss"],
+    providers: [
+        {
+            provide: FormGroupDirective,
+            useFactory: (self: GridComponent) => {
+                return self.formDirective!;
+            },
+            deps: [GridComponent],
+        },
+    ],
+    standalone: false
 })
 export class GridComponent extends ComponentBase implements OnInit {
 	@HostBinding("class") get class(): string {
@@ -90,8 +85,11 @@ export class GridComponent extends ComponentBase implements OnInit {
 	@Input() addMetadata?: RouteMetadata;
 	@Input() labelAdd: string = "Incluir";
 	@Input() orderBy?: QueryOrderBy[];
+	@Input() priorOrderBy?: QueryOrderBy[];
 	@Input() groupBy?: GroupBy[];
 	@Input() join: string[] = [];
+	@Input() leftJoin?: [string, string, string][];
+	@Input() fields?: string[];
 	@Input() relatorios: LookupItem[] = [];
 	@Input() form: FormGroup = new FormGroup({});
 	@Input() noHeader?: string;
@@ -103,7 +101,7 @@ export class GridComponent extends ComponentBase implements OnInit {
 	@Input() control?: AbstractControl = undefined;
 	@Input() expanded?: string;
 	@Input() noToggleable?: string;
-	@Input() minHeight: number = 350;
+	@Input() minHeight: number|string = 350;
 	@Input() maxHeight: number|string = "auto";
 	@Input() multiselect?: string;
 	@Input() multiselectEnabled?: string;
@@ -399,9 +397,12 @@ export class GridComponent extends ComponentBase implements OnInit {
 		this.ngAfterContentInit();
 	}
 
-	public queryInit() {
+	public queryInit(events: queryEvents = {}) {
 		this.query = this.dao?.query(this.queryOptions, {
+			before: events.before,
+			resolve: events.resolve,
 			after: () => {
+				events.after && events.after();
 				this.cdRef.detectChanges();
 					setTimeout(() => {
 						// Dispose existing tooltips to prevent duplicates
@@ -500,11 +501,14 @@ export class GridComponent extends ComponentBase implements OnInit {
 					? this.filterRef?.where(this.filterRef.form)
 					: [],
 			orderBy: [
+				...(this.priorOrderBy || []),
 				...(this.groupBy || []).map((x) => [x.field, "asc"] as QueryOrderBy),
 				...(this.orderBy || []),
 			],
 			join: this.join || [],
 			limit: this.rowsLimit,
+			leftJoin: this.leftJoin,
+			fields: this.fields
 		};
 	}
 

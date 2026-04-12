@@ -15,6 +15,7 @@ class ImpersonationController extends Controller
      */
     public function impersonate(Request $request): JsonResponse
     {
+        /** @var \App\Models\Usuario|null $admin */
         $admin = Auth::guard('sanctum')->user();
 
         if (!$admin || !$admin->canImpersonate()) {
@@ -47,6 +48,8 @@ class ImpersonationController extends Controller
 
     /**
      * Encerrar impersonação e retornar ao admin original
+     * 
+     * @return JsonResponse
      */
     public function stopImpersonating()
     {
@@ -119,7 +122,7 @@ class ImpersonationController extends Controller
                     $query->where('data_leitura', null);
                 }
             ])->first();
-            $request->session()->put("unidade_id", $usuario->lotacao?->id);
+            $request->session()->put("unidade_id", $usuario->lotacao?->unidade_id);
         }
         return $usuario;
     }

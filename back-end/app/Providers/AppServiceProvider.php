@@ -22,6 +22,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\Cache;
+use Stancl\Tenancy\Database\Models\Domain;
 class AppServiceProvider extends ServiceProvider
 {
     /**
@@ -80,8 +82,17 @@ class AppServiceProvider extends ServiceProvider
         URL::forceScheme('https');
         if($this->app->environment('APP_ENV') == 'local') {
             DB::listen(function ($query) {
-                Log::info($query->sql, $query->bindings, $query->time);
+                Log::info($query->sql, ['bindings' => $query->bindings, 'time' => $query->time]);
             });
         }
+
+        Domain::saved(function (Domain $domain) {
+            Cache::forget('domain:tenant_id:'.$domain->tenant_id);
+            Cache::forget('domain:domain:'.$domain->domain);
+        });
+        Domain::deleted(function (Domain $domain) {
+            Cache::forget('domain:tenant_id:'.$domain->tenant_id);
+            Cache::forget('domain:domain:'.$domain->domain);
+        });
     }
 }

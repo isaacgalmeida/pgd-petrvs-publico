@@ -2,22 +2,21 @@ import { Component, Injector, Input, OnInit, ViewChild } from '@angular/core';
 import { AbstractControl, FormControl, FormGroup } from '@angular/forms';
 import { GridComponent } from 'src/app/components/grid/grid.component';
 import { InputTextareaComponent } from 'src/app/components/input/input-textarea/input-textarea.component';
-import { ToolbarButton } from 'src/app/components/toolbar/toolbar.component';
+import { ToolbarButton } from 'src/app/components/toolbar/toolbar-types';
 import { AtividadeTarefaDaoService } from 'src/app/dao/atividade-tarefa-dao.service';
-import { ProjetoDaoService } from 'src/app/dao/projeto-dao.service';
 import { Base, IIndexable } from 'src/app/models/base.model';
 import { Comentario, ComentarioOrigem, HasComentarios } from 'src/app/models/comentario';
 import { ComentarioService } from 'src/app/services/comentario.service';
 import { LookupItem } from 'src/app/services/lookup.service';
 import { PageFrameBase } from '../../base/page-frame-base';
-import { ProjetoTarefaDaoService } from 'src/app/dao/projeto-tarefa-dao.service';
 import { AtividadeDaoService } from 'src/app/dao/atividade-dao.service';
 import { PlanoEntregaEntregaDaoService } from 'src/app/dao/plano-entrega-entrega-dao.service';
 
 @Component({
-  selector: 'comentarios',
-  templateUrl: './comentarios.component.html',
-  styleUrls: ['./comentarios.component.scss']
+    selector: 'comentarios',
+    templateUrl: './comentarios.component.html',
+    styleUrls: ['./comentarios.component.scss'],
+    standalone: false
 })
 export class ComentariosComponent extends PageFrameBase {
   @ViewChild(GridComponent, { static: false }) public grid?: GridComponent;
@@ -82,8 +81,6 @@ export class ComentariosComponent extends PageFrameBase {
     switch(this.origem) {
       case 'ATIVIDADE': this.dao = this.injector.get<AtividadeDaoService>(AtividadeDaoService); break;
       case 'ATIVIDADE_TAREFA': this.dao = this.injector.get<AtividadeTarefaDaoService>(AtividadeTarefaDaoService); break;
-      case 'PROJETO': this.dao = this.injector.get<ProjetoDaoService>(ProjetoDaoService); break;
-      case 'PROJETO_TAREFA': this.dao = this.injector.get<ProjetoTarefaDaoService>(ProjetoTarefaDaoService); break;
       case 'PLANO_ENTREGA_ENTREGA': this.dao = this.injector.get<PlanoEntregaEntregaDaoService>(PlanoEntregaEntregaDaoService); break;
     }
   }

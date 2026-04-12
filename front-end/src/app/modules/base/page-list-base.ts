@@ -4,9 +4,11 @@ import { DaoBaseService, QueryOrderBy } from 'src/app/dao/dao-base.service';
 import { Base, IIndexable } from 'src/app/models/base.model';
 import { PageBase } from './page-base';
 import { FullRoute, NavigateService, RouteMetadata } from 'src/app/services/navigate.service';
-import { GridComponent, GroupBy } from 'src/app/components/grid/grid.component';
+import { GridComponent } from 'src/app/components/grid/grid.component';
+import { GroupBy } from 'src/app/components/grid/grid-types';
+
 import { QueryContext } from 'src/app/dao/query-context';
-import { ToolbarButton } from 'src/app/components/toolbar/toolbar.component';
+import { ToolbarButton } from 'src/app/components/toolbar/toolbar-types';
 //import { appInjector } from 'src/app/app.component';
 import { QueryOptions } from 'src/app/dao/query-options';
 import { TreeNode } from 'primeng/api';
@@ -27,8 +29,11 @@ export abstract class PageListBase<M extends Base, D extends DaoBaseService<M>> 
 
   /* configurações */
   public orderBy?: QueryOrderBy[];
+  public modalInfiniteScrollContainer: string|null = null;
   public groupBy?: GroupBy[];
   public join: string[] = [];
+  public fields?: string[];
+  public leftJoin?: [string, string, string][];
   public addRoute?: string[];
   public addParams?: any;
   public rowsLimit = QueryContext.DEFAULT_LIMIT;
@@ -115,13 +120,32 @@ export abstract class PageListBase<M extends Base, D extends DaoBaseService<M>> 
       where: this.filterWhere && this.filter ? this.filterWhere(this.filter) : [],
       orderBy: [...(this.groupBy || []).map(x => [x.field, "asc"] as QueryOrderBy), ...(this.orderBy || [])],
       join: this.join || [],
-      limit: this.rowsLimit
+      limit: this.rowsLimit,
+      leftJoin: this.leftJoin,
+      fields: this.fields
     };
   }
 
   public onLoad() {
-    this.grid?.queryInit();
-    if(!this.grid) this.query = this.dao?.query(this.queryOptions, { after: () => this.cdRef.detectChanges() });
+    this.grid?.queryInit({
+      before: () => this.beforeQuery(),
+      resolve: (rows) => this.onQueryResolve(rows),
+      after: () => this.afterQuery()
+    });
+    if(!this.grid) this.query = this.dao?.query(this.queryOptions, {
+      before: () => this.beforeQuery(),
+      resolve: (rows) => this.onQueryResolve(rows),
+      after: () => this.afterQuery()
+    });
+  }
+
+  public onQueryResolve(rows: any | null) {
+  }
+
+  protected beforeQuery() {}
+
+  protected afterQuery() {
+    this.cdRef.detectChanges();
   }
 
   ngOnInit() {

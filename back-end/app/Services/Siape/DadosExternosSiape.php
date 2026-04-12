@@ -5,9 +5,11 @@ namespace App\Services\Siape;
 use App\Services\Siape\BuscarDados\BuscarDadosSiape;
 use App\Services\Siape\BuscarDados\BuscarDadosSiapeServidor;
 use App\Services\Siape\BuscarDados\BuscarDadosSiapeUnidade;
+use App\Services\Siape\SiapeServidorFaultProcessor;
 use Exception;
 use Illuminate\Support\Facades\Log;
 use SimpleXMLElement;
+use function simpleXmlElementToArray;
 
 trait DadosExternosSiape
 {
@@ -31,7 +33,10 @@ trait DadosExternosSiape
         $this->inicializaSiape('buscaDadosUnidade');
         $codOrgao = strval(intval($this->configIntegracaoSiape['codOrgao']));
 
-        $xmlData =  $this->siapeClassBuscaDados->getUorgAsXml(
+        /** @var BuscarDadosSiapeUnidade $buscaDados */
+        $buscaDados = $this->siapeClassBuscaDados;
+
+        $xmlData =  $buscaDados->getUorgAsXml(
             $this->configIntegracaoSiape['siglaSistema'],
             $this->configIntegracaoSiape['nomeSistema'],
             $this->configIntegracaoSiape['senha'],
@@ -47,7 +52,7 @@ trait DadosExternosSiape
     /**
      *
      * @param string $cpf
-     * @return SimpleXMLElement[]
+     * @return array [dadosFuncionais[], dadosPessoais]
      */
     public function buscaServidor(string $cpf): array
     {
@@ -55,7 +60,10 @@ trait DadosExternosSiape
         $this->inicializaSiape('buscaServidor');
         $codOrgao = strval(intval($this->configIntegracaoSiape['codOrgao']));
 
-        $xmlDataFuncionais = $this->siapeClassBuscaDados->consultaDadosFuncionais(
+        // Dados funcionais
+        /** @var BuscarDadosSiapeServidor $buscaDados */
+        $buscaDados = $this->siapeClassBuscaDados;
+        $xmlDataFuncionais = $buscaDados->consultaDadosFuncionais(
             $this->configIntegracaoSiape['siglaSistema'],
             $this->configIntegracaoSiape['nomeSistema'],
             $this->configIntegracaoSiape['senha'],
@@ -67,8 +75,32 @@ trait DadosExternosSiape
 
         $retornoFuncionais = $this->siapeClassBuscaDados->buscaSincrona($xmlDataFuncionais);
         $xmlFuncional = $this->siapeClassBuscaDados->prepareResponseXml($retornoFuncionais);
+        (new SiapeServidorFaultProcessor($xmlFuncional, $cpf, $retornoFuncionais, 'FUNCIONAL'))->process();
 
-        $xmlDataPessoais = $this->siapeClassBuscaDados->consultaDadosPessoais(
+        // Tratar múltiplos dados funcionais seguindo ProcessaDadosSiapeBD
+        $xmlFuncional->registerXPathNamespace('soap', 'http://schemas.xmlsoap.org/soap/envelope/');
+        $xmlFuncional->registerXPathNamespace('ns1', 'http://servico.wssiapenet');
+        $xmlFuncional->registerXPathNamespace('tipo', 'http://tipo.servico.wssiapenet');
+
+        $dadosFuncionaisElements = $xmlFuncional->xpath('//tipo:DadosFuncionais') ?: [];
+        $dadosFuncionaisArray = [];
+
+        if (count($dadosFuncionaisElements) === 1) {
+            $dadosFuncionaisArray = [simpleXmlElementToArray($dadosFuncionaisElements[0])];
+        } else {
+            foreach ($dadosFuncionaisElements as $df) {
+                $dados = simpleXmlElementToArray($df);
+                if (!empty($dados['dataOcorrExclusao'])) {
+                    continue;
+                }
+                $dadosFuncionaisArray[] = $dados;
+            }
+        }
+
+        // Dados pessoais (manter saída mínima necessária)
+        /** @var BuscarDadosSiapeServidor $buscaDados */
+        $buscaDados = $this->siapeClassBuscaDados;
+        $xmlDataPessoais = $buscaDados->consultaDadosPessoais(
             $this->configIntegracaoSiape['siglaSistema'],
             $this->configIntegracaoSiape['nomeSistema'],
             $this->configIntegracaoSiape['senha'],
@@ -77,25 +109,27 @@ trait DadosExternosSiape
             $this->configIntegracaoSiape['parmExistPag'],
             $this->configIntegracaoSiape['parmTipoVinculo']
         );
-        
+
         $retornoPessoais = $this->siapeClassBuscaDados->buscaSincrona($xmlDataPessoais);
         $xmlPessoal = $this->siapeClassBuscaDados->prepareResponseXml($retornoPessoais);
+        (new SiapeServidorFaultProcessor($xmlPessoal, $cpf, $retornoPessoais, 'PESSOAL'))->process();
 
-        $out = isset($xmlPessoal->xpath('//out')[0]) ? $xmlPessoal->xpath('//out')[0] : $xmlPessoal->xpath('//out'); 
+        $outNodes = $xmlPessoal->xpath('//out');
+        $out = isset($outNodes[0]) ? $outNodes[0] : null;
+        $dadosPessoaisArray = [];
 
-        $newXmlPessoal = new SimpleXMLElement('<out/>');
-
-            $fieldsToKeep = ['nome', 'dataNascimento'];
-
-            foreach ($fieldsToKeep as $field) {
-                if (isset($out->$field)) {
-                    $newXmlPessoal->addChild($field, (string) $out->$field);
+        if ($out instanceof SimpleXMLElement) {
+            $todosCampos = simpleXmlElementToArray($out);
+            foreach (['nome', 'dataNascimento'] as $field) {
+                if (array_key_exists($field, $todosCampos)) {
+                    $dadosPessoaisArray[$field] = $todosCampos[$field];
                 }
             }
+        }
 
         return [
-            $xmlFuncional,
-            $newXmlPessoal
+            $dadosFuncionaisArray,
+            $dadosPessoaisArray
         ];
     }
 }

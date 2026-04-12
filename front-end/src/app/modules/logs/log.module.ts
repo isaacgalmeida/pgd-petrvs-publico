@@ -1,7 +1,7 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { LogRoutingModule } from './log-routing.module';
-import { ComponentsModule } from 'src/app/components/components.module';
+import { SharedModule } from 'src/app/shared/shared.module';
 import { ReactiveFormsModule } from '@angular/forms';
 import { ChangeListComponent } from './change/change-list/change-list.component';
 import { ErrorFormComponent } from './error/error-form/error-form.component';
@@ -12,6 +12,7 @@ import { EnvioItemParticipanteListComponent } from './envios/envio-item-particip
 import { EnvioItemConsultComponent } from './envios/envio-item-consult/envio-item-consult.component';
 import { EnvioItemTrabalhoListComponent } from './envios/envio-item-trabalho-list/envio-item-trabalho-list.component';
 import { EnvioItemEntregaListComponent } from './envios/envio-item-entrega-list/envio-item-entrega-list.component';
+import { SystemLogsListComponent } from './system-logs/system-logs-list/system-logs-list.component';
 
 @NgModule({
   declarations: [
@@ -23,11 +24,12 @@ import { EnvioItemEntregaListComponent } from './envios/envio-item-entrega-list/
     EnvioItemConsultComponent,
     EnvioItemParticipanteListComponent,
     EnvioItemTrabalhoListComponent,
-    EnvioItemEntregaListComponent
+    EnvioItemEntregaListComponent,
+    SystemLogsListComponent
   ],
   imports: [
     CommonModule,
-    ComponentsModule,
+    SharedModule,
     ReactiveFormsModule,
     LogRoutingModule,
   ]
