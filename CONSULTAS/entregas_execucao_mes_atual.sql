@@ -1,11 +1,11 @@
--- Consulta de Entregas Agregadas por Unidade e Servidor (Sintaxe DuckDB/Metabase)
--- Objetivo: Alimentar gráficos no Metabase agrupando por Unidade e Servidor no mês atual
+-- Consulta de Entregas Agrupadas para Visualização em Tabela (Sintaxe DuckDB/Metabase)
+-- Objetivo: Simular uma estrutura de níveis (Unidade > Servidor) compatível com Tabelas do Metabase
 SELECT 
     un.nome AS unidade_nome,
     us.nome AS servidor_nome,
-    COUNT(pte.id) AS total_entregas,
-    -- Agrupamos os nomes das entregas em uma lista para detalhamento no Metabase (opcional)
-    list(e.nome) AS lista_entregas
+    -- Agrupamos as entregas em uma única célula separada por quebras de linha ou vírgulas
+    string_agg(e.nome || ' (' || pee.descricao || ')', '\n') AS detalhamento_entregas,
+    COUNT(pte.id) AS total_entregas
 FROM 
     planos_trabalhos pt
 JOIN 
@@ -13,7 +13,7 @@ JOIN
 JOIN 
     unidades un ON pt.unidade_id = un.id
 JOIN 
-    planos_trabalhos_entregas pte ON pte.plano_trabal_id = pt.id
+    planos_trabalhos_entregas pte ON pte.plano_trabalho_id = pt.id
 JOIN 
     planos_entregas_entregas pee ON pte.plano_entrega_entrega_id = pee.id
 JOIN 
@@ -29,4 +29,4 @@ GROUP BY
     us.nome
 ORDER BY 
     un.nome ASC, 
-    total_entregas DESC;
+    us.nome ASC;
