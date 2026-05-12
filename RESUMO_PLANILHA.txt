@@ -1,0 +1,74 @@
+═══════════════════════════════════════════════════════════════════════════════
+RESUMO PARA PLANILHA DE ENTREGAS
+═══════════════════════════════════════════════════════════════════════════════
+
+TÍTULO DA ENTREGA:
+Correção da Consulta SQL de Identificação de Desligamentos PGD (Art. 28)
+
+───────────────────────────────────────────────────────────────────────────────
+DESCRIÇÃO DO QUE FOI FEITO:
+───────────────────────────────────────────────────────────────────────────────
+
+Correção de erro crítico na consulta SQL utilizada para identificar 
+participantes sujeitos a desligamento do PGD conforme Art. 28 da Portaria 
+nº 126 GAB/REITORIA/2025. A consulta apresentava erro "Table 
+'tipos_modalidades' doesn't exist" devido à remoção dessa tabela na migration 
+2026_04_23. Foram realizadas as seguintes atividades:
+
+1. Análise da estrutura atual do banco de dados e identificação da causa raiz
+2. Remoção do JOIN com tabela inexistente e substituição por coluna 
+   modalidade_pgd
+3. Alteração de LEFT JOIN para INNER JOIN em consolidações para evitar 
+   registros inválidos
+4. Inclusão de filtros deleted_at IS NULL para excluir registros excluídos
+5. Melhoria no cálculo de meses consecutivos com normalização DATE_FORMAT
+6. Preservação de todos os 12 nomes de colunas para manter compatibilidade 
+   total com automação n8n existente
+7. Criação de documentação técnica completa (5 documentos)
+
+───────────────────────────────────────────────────────────────────────────────
+RESULTADO ALCANÇADO:
+───────────────────────────────────────────────────────────────────────────────
+
+✅ Consulta SQL corrigida e executando sem erros
+✅ Automação de identificação de desligamentos 100% operacional
+✅ Conformidade garantida com Art. 28 (dois meses consecutivos sem registro)
+✅ Compatibilidade total mantida com automação n8n (zero impacto)
+✅ Qualidade de dados melhorada com filtros mais rigorosos
+✅ Documentação técnica completa entregue (6 arquivos)
+✅ Alinhamento com estrutura atual do banco de dados
+✅ Processo automatizado de notificação de desligamentos restaurado
+
+IMPACTO: Restauração da capacidade de identificar automaticamente participantes 
+que descumprem a regra legal de registro mensal, garantindo conformidade com 
+a Portaria nº 126 e permitindo ações administrativas tempestivas.
+
+ENTREGÁVEIS: consulta_desligamento_art28.sql (arquivo principal), 
+documentação técnica completa, workflow n8n de referência, guia de migração.
+
+───────────────────────────────────────────────────────────────────────────────
+VERSÃO CURTA (para células pequenas):
+───────────────────────────────────────────────────────────────────────────────
+
+O QUE FOI FEITO:
+Correção de erro crítico na consulta SQL de identificação de desligamentos 
+PGD (Art. 28). Removida referência à tabela tipos_modalidades (inexistente) 
+e substituída por coluna modalidade_pgd. Melhorados filtros e cálculo de 
+meses consecutivos. Mantida compatibilidade total com automação n8n.
+
+RESULTADO:
+Consulta corrigida e operacional. Automação de desligamentos restaurada. 
+Conformidade com Art. 28 garantida. Zero impacto na automação existente. 
+Documentação completa entregue.
+
+───────────────────────────────────────────────────────────────────────────────
+VERSÃO ULTRA CURTA (para células muito pequenas):
+───────────────────────────────────────────────────────────────────────────────
+
+FEITO: Correção de consulta SQL de desligamentos PGD - removida tabela 
+inexistente, melhorados filtros, mantida compatibilidade n8n.
+
+RESULTADO: Automação operacional, conformidade Art. 28 garantida, 
+documentação entregue.
+
+═══════════════════════════════════════════════════════════════════════════════

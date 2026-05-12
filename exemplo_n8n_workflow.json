@@ -1,0 +1,128 @@
+{
+  "name": "PGD - Identificação de Desligamentos (Art. 28)",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Cole aqui o conteúdo de consulta_atrasos_revisada.sql",
+        "options": {}
+      },
+      "name": "Executar Consulta SQL",
+      "type": "n8n-nodes-base.mysql",
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"destacar_linha\"]}}",
+              "operation": "equals",
+              "value2": "Sim"
+            }
+          ]
+        }
+      },
+      "name": "Filtrar Apenas Desligamentos",
+      "type": "n8n-nodes-base.if",
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Agrupar por participante para evitar duplicatas\nconst participantes = {};\n\nitems.forEach(item => {\n  const id = item.json.usuario_id;\n  \n  if (!participantes[id]) {\n    participantes[id] = {\n      usuario_id: id,\n      participanteNome: item.json.participanteNome,\n      unidadeSigla: item.json.unidadeSigla,\n      tipoModalidadeNome: item.json.tipoModalidadeNome,\n      meses_consecutivos: [],\n      total_atrasos: 0\n    };\n  }\n  \n  participantes[id].meses_consecutivos.push({\n    periodo_inicio: item.json.data_inicio_avaliativo,\n    periodo_fim: item.json.data_fim_avaliativo,\n    data_conclusao: item.json.dataConclusao,\n    ptcId: item.json.ptcId\n  });\n  \n  participantes[id].total_atrasos++;\n});\n\n// Converter para array\nconst resultado = Object.values(participantes).map(p => ({\n  json: {\n    ...p,\n    quantidade_meses_consecutivos: p.meses_consecutivos.length,\n    // Formatar períodos para exibição\n    periodos_formatados: p.meses_consecutivos\n      .map(m => `${m.periodo_inicio} a ${m.periodo_fim} (concluído em ${m.data_conclusao})`)\n      .join('; '),\n    // Flag para facilitar filtros\n    requer_desligamento: p.meses_consecutivos.length >= 2\n  }\n}));\n\nreturn resultado;"
+      },
+      "name": "Agrupar por Participante",
+      "type": "n8n-nodes-base.function",
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "subject": "🚨 ALERTA: Desligamento PGD - {{$json[\"participanteNome\"]}}",
+        "emailType": "html",
+        "message": "<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    body { font-family: Arial, sans-serif; }\n    .header { background-color: #d32f2f; color: white; padding: 20px; }\n    .content { padding: 20px; }\n    .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }\n    .details { background-color: #f5f5f5; padding: 15px; margin: 20px 0; }\n    .footer { background-color: #f5f5f5; padding: 15px; margin-top: 30px; font-size: 12px; }\n  </style>\n</head>\n<body>\n  <div class=\"header\">\n    <h1>🚨 Notificação de Desligamento do PGD</h1>\n  </div>\n  \n  <div class=\"content\">\n    <p>Prezado(a) <strong>{{$json[\"participanteNome\"]}}</strong>,</p>\n    \n    <div class=\"warning\">\n      <h3>⚠️ ATENÇÃO: Desligamento Automático do PGD</h3>\n      <p>Conforme o <strong>Art. 28 da Portaria nº 126 GAB/REITORIA, de 06 de agosto de 2025</strong>, \n      você será desligado do Programa de Gestão e Desempenho (PGD) por não ter realizado o registro \n      de execução das entregas e a conclusão do ciclo mensal do plano de trabalho até o dia 10 do \n      mês subsequente por <strong>{{$json[\"quantidade_meses_consecutivos\"]}} meses consecutivos</strong>.</p>\n    </div>\n    \n    <div class=\"details\">\n      <h3>📋 Detalhes da Ocorrência</h3>\n      <ul>\n        <li><strong>Participante:</strong> {{$json[\"participanteNome\"]}}</li>\n        <li><strong>Unidade:</strong> {{$json[\"unidadeSigla\"]}}</li>\n        <li><strong>Modalidade:</strong> {{$json[\"tipoModalidadeNome\"]}}</li>\n        <li><strong>Meses consecutivos com atraso:</strong> {{$json[\"quantidade_meses_consecutivos\"]}}</li>\n        <li><strong>Total de atrasos:</strong> {{$json[\"total_atrasos\"]}}</li>\n      </ul>\n      \n      <h4>Períodos com Atraso:</h4>\n      <p>{{$json[\"periodos_formatados\"]}}</p>\n    </div>\n    \n    <h3>📌 Próximos Passos</h3>\n    <ol>\n      <li>Esta notificação será registrada em seu histórico funcional</li>\n      <li>O processo de desligamento será iniciado automaticamente</li>\n      <li>Você receberá um documento formal nos próximos dias úteis</li>\n      <li>Caso tenha justificativas, entre em contato com a gestão de RH</li>\n    </ol>\n    \n    <div class=\"footer\">\n      <p><strong>Base Legal:</strong> Portaria nº 126 GAB/REITORIA, de 06 de agosto de 2025, Art. 28</p>\n      <p><em>Esta é uma notificação automática gerada pelo sistema PGD-PETRVS.</em></p>\n      <p>Data de geração: {{$now.format('DD/MM/YYYY HH:mm:ss')}}</p>\n    </div>\n  </div>\n</body>\n</html>",
+        "options": {}
+      },
+      "name": "Enviar Email de Notificação",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Gerar relatório consolidado em formato CSV\nconst csv_header = \"Usuario ID,Nome,Unidade,Modalidade,Meses Consecutivos,Total Atrasos,Períodos\\n\";\n\nconst csv_rows = items.map(item => {\n  const j = item.json;\n  return `\"${j.usuario_id}\",\"${j.participanteNome}\",\"${j.unidadeSigla}\",\"${j.tipoModalidadeNome}\",${j.quantidade_meses_consecutivos},${j.total_atrasos},\"${j.periodos_formatados}\"`;\n}).join(\"\\n\");\n\nconst csv_content = csv_header + csv_rows;\n\nreturn [{\n  json: {\n    filename: `desligamentos_pgd_${new Date().toISOString().split('T')[0]}.csv`,\n    content: csv_content,\n    total_participantes: items.length,\n    data_geracao: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Gerar Relatório CSV",
+      "type": "n8n-nodes-base.function",
+      "position": [850, 500]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "fileContent": "={{$json[\"content\"]}}",
+        "fileName": "={{$json[\"filename\"]}}",
+        "options": {}
+      },
+      "name": "Salvar Relatório",
+      "type": "n8n-nodes-base.googleDrive",
+      "position": [1050, 500]
+    }
+  ],
+  "connections": {
+    "Executar Consulta SQL": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Apenas Desligamentos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Apenas Desligamentos": {
+      "main": [
+        [
+          {
+            "node": "Agrupar por Participante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agrupar por Participante": {
+      "main": [
+        [
+          {
+            "node": "Enviar Email de Notificação",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Gerar Relatório CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar Relatório CSV": {
+      "main": [
+        [
+          {
+            "node": "Salvar Relatório",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-05-12T00:00:00.000Z",
+  "versionId": "1"
+}
